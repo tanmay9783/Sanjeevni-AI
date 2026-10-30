@@ -53,29 +53,114 @@ app.get("/", (req, res) => {
 });
 
 // Doctor Dashboard Queue API
-app.get("/api/patients", (req, res) => {
-  res.json({ patients: patientQueue });
+app.get("/api/patients", async (req, res) => {
+  let combinedPatients = [...patientQueue];
+
+  // Attempt to enrich with active Swasya AI queue if reachable
+  const swasyaBaseUrl = process.env.SWASYA_API_URL || "http://localhost:8000";
+  try {
+    const queueRes = await fetch(`${swasyaBaseUrl}/queue`, { signal: AbortSignal.timeout(1200) });
+    if (queueRes.ok) {
+      const qData = await queueRes.json();
+      const swasyaQueue = qData.queue || qData.waiting_patients || [];
+      swasyaQueue.forEach(sq => {
+        const id = sq.patient_id || sq.uhid || sq.id;
+        if (!combinedPatients.some(cp => String(cp.id) === String(id))) {
+          combinedPatients.push({
+            id: id,
+            name: sq.patient_name || sq.name || "PHC Patient",
+            age: sq.age || "N/A",
+            mobile: sq.phone || sq.mobile || "",
+            status: sq.status || "ready_for_doctor",
+            priority: sq.priority || "normal",
+            source: sq.source || "Swasya AI Queue",
+            selectedBodyPart: "PHC General Queue",
+            painSeverity: sq.priority === "emergency" ? 8 : 4
+          });
+        }
+      });
+    }
+  } catch (_) {}
+
+  res.json({ patients: combinedPatients });
 });
 
 // ABHA ID / Patient Health Profile Lookup API
-app.get("/api/patient-lookup", (req, res) => {
-  const query = (req.query.query || "").trim().toLowerCase();
+app.get("/api/patient-lookup", async (req, res) => {
+  const query = (req.query.query || "").trim();
   if (!query) {
     return res.status(400).json({ error: "Missing lookup query parameter" });
   }
 
+  const queryLower = query.toLowerCase();
+
   const matchLocal = patientQueue.find(
     (p) =>
-      (p.abhaId && p.abhaId.toLowerCase().includes(query)) ||
+      (p.abhaId && p.abhaId.toLowerCase().includes(queryLower)) ||
       (p.mobile && p.mobile.includes(query)) ||
       (p.id && String(p.id) === query)
   );
 
   if (matchLocal) {
-    return res.json({ found: true, patient: matchLocal });
+    return res.json({ found: true, patient: matchLocal, source: "Live Session Queue" });
   }
 
-  // Look up in DB
+  // 1. Look up in Swasya AI PHC database first for comprehensive hospital records
+  const swasyaBaseUrl = process.env.SWASYA_API_URL || "http://localhost:8000";
+  try {
+    const swasyaRes = await fetch(`${swasyaBaseUrl}/patients/check-uhid/${encodeURIComponent(query)}`, {
+      signal: AbortSignal.timeout(2000)
+    });
+    if (swasyaRes.ok) {
+      const swasyaData = await swasyaRes.json();
+      if (swasyaData.exists && swasyaData.patient) {
+        const pt = swasyaData.patient;
+        let pastVisits = [];
+        try {
+          const sumRes = await fetch(`${swasyaBaseUrl}/patients/summary/${pt.patient_id || pt.uhid}`, {
+            signal: AbortSignal.timeout(1500)
+          });
+          if (sumRes.ok) {
+            const sumData = await sumRes.json();
+            if (sumData.latest_note?.soap_note) {
+              const sn = sumData.latest_note.soap_note;
+              pastVisits.push({
+                date: sumData.latest_note.created_at ? sumData.latest_note.created_at.split("T")[0] : "Recent",
+                selectedBodyPart: sn.chief_complaint || "Previous PHC Consultation",
+                painSeverity: 5,
+                summary: sn.assessment || sn.subjective || "Consultation completed."
+              });
+            }
+          }
+        } catch (_) {}
+
+        const patient = {
+          id: pt.patient_id || pt.uhid,
+          abhaId: pt.uhid || query,
+          name: pt.name || "Patient",
+          age: String(pt.age || ""),
+          mobile: pt.phone || "",
+          language: "hi-IN",
+          source: "Swasya AI PHC Records",
+          chronicConditions: pt.chronic_conditions || [],
+          allergies: pt.allergies || [],
+          pastVisits: pastVisits
+        };
+
+        // Cache into local SQLite
+        try {
+          const insertStmt = db.prepare('INSERT OR REPLACE INTO patients (id, abhaId, name, age, mobile, language) VALUES (?, ?, ?, ?, ?, ?)');
+          insertStmt.run(String(patient.id), patient.abhaId, patient.name, patient.age, patient.mobile, patient.language);
+        } catch (_) {}
+
+        return res.json({ found: true, patient, source: "Swasya AI PHC Records" });
+      }
+    }
+  } catch (err) {
+    console.log("ℹ️ Swasya AI lookup unavailable (offline or not running):", err.message);
+  }
+
+  // 2. Look up in local SQLite DB
   try {
     const patientRow = db.prepare('SELECT * FROM patients WHERE abhaId LIKE ? OR mobile LIKE ? OR id = ?').get(`%${query}%`, `%${query}%`, query);
     
@@ -87,7 +172,7 @@ app.get("/api/patient-lookup", (req, res) => {
         ...patientRow,
         pastVisits: pastVisits
       };
-      return res.json({ found: true, patient });
+      return res.json({ found: true, patient, source: "Local Clinic Database" });
     }
   } catch (err) {
     console.error("DB Lookup error:", err);
@@ -708,21 +793,32 @@ Do not include pleasantries.`;
     console.log(`✅ Summary text file generated: ${filename}`);
 
     // 3. Send payload to Swasya AI doctor dashboard (non-blocking if Swasya is offline)
+    let swasyaSynced = false;
     try {
       console.log(`📤 Sending payload to Swasya AI backend at ${swasyaBaseUrl}...`);
+      const swasyaPayload = {
+        uhid: String(currentPatient?.abhaId || id),
+        name: name || currentPatient?.name || "Unknown Avatar Patient",
+        age: String(age || currentPatient?.age || ""),
+        phone: String(mobile || currentPatient?.mobile || ""),
+        summary: summaryText,
+        selected_body_part: currentPatient?.selectedBodyPart || "General Consultation",
+        pain_severity: Number(currentPatient?.painSeverity) || 5,
+        system: currentPatient?.system || "allopathic",
+        attached_report: currentPatient?.attachedReport || null
+      };
+
       const swasyaRes = await fetch(`${swasyaBaseUrl}/patients/avatar-summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          uhid: String(id),
-          name: name || "Unknown Avatar Patient",
-          age: age || "Unknown",
-          phone: mobile || "Unknown",
-          summary: summaryText
-        })
+        body: JSON.stringify(swasyaPayload),
+        signal: AbortSignal.timeout(3000)
       });
 
-      if (!swasyaRes.ok) {
+      if (swasyaRes.ok) {
+        swasyaSynced = true;
+        console.log("✅ Successfully sent avatar summary & added to Swasya Doctor Queue!");
+      } else {
         const errText = await swasyaRes.text();
         console.warn("Swasya AI Warning:", errText);
       }
@@ -745,7 +841,15 @@ Do not include pleasantries.`;
       console.error("⚠️ Failed to save visit to DB:", dbErr.message);
     }
 
-    res.json({ success: true, summary: summaryText, message: "Summary generated and saved successfully.", file: filename });
+    res.json({
+      success: true,
+      summary: summaryText,
+      swasyaSynced,
+      message: swasyaSynced 
+        ? "Summary generated and routed directly into Swasya Doctor Queue!"
+        : "Summary generated and saved locally.",
+      file: filename
+    });
 
   } catch (error) {
     console.error("🔥 /send-to-doctor error:", error);

@@ -46,6 +46,16 @@ export const DoctorDashboard = ({ onClose }) => {
         </div>
 
         <div className="flex items-center gap-3">
+          <a
+            href="http://localhost:3000"
+            target="_blank"
+            rel="noreferrer"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all shadow-md shadow-indigo-600/20 flex items-center gap-2"
+            title="Launch Full Swasya PHC Hospital Portal"
+          >
+            <span>🏥</span> Open Swasya Portal
+          </a>
+
           <button
             onClick={fetchPatients}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all border border-slate-700 flex items-center gap-2"
