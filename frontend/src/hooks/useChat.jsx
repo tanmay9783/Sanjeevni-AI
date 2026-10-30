@@ -143,6 +143,7 @@ export const ChatProvider = ({ children }) => {
         onMessagePlayed: onMessagePlayedWrapped,
         playCustomMessage,
         loading,
+        isAvatarSpeaking: !!message || loading || pythonPlaying,
         cameraZoomed,
         setCameraZoomed,
         pythonPlaying,

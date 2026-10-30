@@ -4,17 +4,17 @@ import dotenv from "dotenv";
 import express from "express";
 import { promises as fs } from "fs";
 import Groq from "groq-sdk";
+import multer from "multer";
+import db from "./db.js";
 
 dotenv.config();
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
+  apiKey: process.env.GROQ_API_KEY || "gsk_placeholder_add_your_groq_api_key_in_env",
 });
 
 const murfApiKey = process.env.MURF_API_KEY;
 
-// You can use either a Murf voice ID like "en-US-natalie"
-// or just the voice actor name like "Natalie"
 // 🔹 Murf Voice Configuration — optimized for Indian PHC context
 const MURF_VOICE_ID = process.env.MURF_VOICE_ID || "hi-IN-shweta"; // Default to high-quality Hindi voice
 const MURF_LOCALE = process.env.MURF_LOCALE || "hi-IN";
@@ -22,6 +22,8 @@ const MURF_LOCALE = process.env.MURF_LOCALE || "hi-IN";
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Allow any origin in dev; lock it to your Vercel URL in production via CORS_ORIGIN env var
 app.use(cors({
@@ -31,26 +33,67 @@ app.use(cors({
 const port = process.env.PORT || 3125;
 
 // Groq model — change here if you want to upgrade/downgrade
-// Current available models (Aug 2026): "groq/compound", "groq/compound-mini",
-// "openai/gpt-oss-120b", "openai/gpt-oss-20b"
-// Deprecated: llama-3.3-70b-versatile, llama-3.1-8b-instant
 const GROQ_MODEL = process.env.GROQ_MODEL || "groq/compound-mini";
-
 
 // ── Global state variables (declared here to avoid ReferenceError in routes) ──
 let chatHistory = [];
 let currentPatient = null;
+let patientQueue = []; // Doctor Dashboard Live Queue
 let latestTranscript = "";
 let pythonMode       = false;   // true = Python is in charge, React must stay silent
 let latestAvatarPayload = null; // stores the payload Python sends
 
 // Paths — set RHUBARB_PATH / FFMPEG_PATH in .env for local Windows dev.
 // On Railway/Render (Linux) leave them blank to use system-installed binaries.
-const RHUBARB_PATH = process.env.RHUBARB_PATH || "rhubarb";
-const FFMPEG_PATH  = process.env.FFMPEG_PATH  || "ffmpeg";
+let RHUBARB_PATH = process.env.RHUBARB_PATH || (process.platform === "win32" ? "C:\\Rhubarb\\Rhubarb-Lip-Sync-1.14.0-Windows\\rhubarb.exe" : "rhubarb");
+const FFMPEG_PATH = process.env.FFMPEG_PATH || (process.platform === "win32" ? "C:\\ffmpeg\\ffmpeg-8.1-essentials_build\\bin\\ffmpeg.exe" : "ffmpeg");
 
 app.get("/", (req, res) => {
   res.send(`Sanjeevni AI backend running | Model: ${GROQ_MODEL}`);
+});
+
+// Doctor Dashboard Queue API
+app.get("/api/patients", (req, res) => {
+  res.json({ patients: patientQueue });
+});
+
+// ABHA ID / Patient Health Profile Lookup API
+app.get("/api/patient-lookup", (req, res) => {
+  const query = (req.query.query || "").trim().toLowerCase();
+  if (!query) {
+    return res.status(400).json({ error: "Missing lookup query parameter" });
+  }
+
+  const matchLocal = patientQueue.find(
+    (p) =>
+      (p.abhaId && p.abhaId.toLowerCase().includes(query)) ||
+      (p.mobile && p.mobile.includes(query)) ||
+      (p.id && String(p.id) === query)
+  );
+
+  if (matchLocal) {
+    return res.json({ found: true, patient: matchLocal });
+  }
+
+  // Look up in DB
+  try {
+    const patientRow = db.prepare('SELECT * FROM patients WHERE abhaId LIKE ? OR mobile LIKE ? OR id = ?').get(`%${query}%`, `%${query}%`, query);
+    
+    if (patientRow) {
+      // Fetch past visits
+      const pastVisits = db.prepare('SELECT date, selectedBodyPart, painSeverity, summary FROM visits WHERE patientId = ? ORDER BY createdAt DESC').all(patientRow.id);
+      
+      const patient = {
+        ...patientRow,
+        pastVisits: pastVisits
+      };
+      return res.json({ found: true, patient });
+    }
+  } catch (err) {
+    console.error("DB Lookup error:", err);
+  }
+
+  return res.json({ found: false, message: "No existing ABHA patient profile found." });
 });
 
 // Diagnostic: list all models available on your Groq API key
@@ -214,7 +257,6 @@ const lipSyncMessage = async (messageIndex) => {
   console.log(`Lip sync done in ${Date.now() - time}ms`);
 };
 
-
 app.post("/chat", async (req, res) => {
   try {
     if (pythonMode) {
@@ -228,8 +270,35 @@ app.post("/chat", async (req, res) => {
     
     // 🔹 Initialize patient context if provided
     if (req.body.patientData) {
-      currentPatient = req.body.patientData;
-      chatHistory = []; // Reset history for new patient
+      currentPatient = { ...currentPatient, ...req.body.patientData };
+      if (!currentPatient.id) {
+        currentPatient.id = Math.floor(1000 + Math.random() * 9000);
+      }
+      // Add or update in patient queue for Doctor Dashboard
+      const existingIdx = patientQueue.findIndex(p => String(p.id) === String(currentPatient.id));
+      if (existingIdx >= 0) {
+        patientQueue[existingIdx] = { ...patientQueue[existingIdx], ...currentPatient };
+      } else {
+        patientQueue.unshift({ ...currentPatient });
+      }
+
+      // Save new patient to DB
+      try {
+        const existing = db.prepare('SELECT id FROM patients WHERE id = ?').get(String(currentPatient.id));
+        if (!existing) {
+          const insertStmt = db.prepare('INSERT INTO patients (id, abhaId, name, age, mobile, language) VALUES (?, ?, ?, ?, ?, ?)');
+          insertStmt.run(
+            String(currentPatient.id),
+            currentPatient.abhaId || "",
+            currentPatient.name || "Unknown",
+            String(currentPatient.age || ""),
+            currentPatient.mobile || "",
+            currentPatient.language || "en-IN"
+          );
+        }
+      } catch (dbErr) {
+        console.error("Failed to save patient to DB:", dbErr);
+      }
     }
 
     // 🔹 Default intro if no message and no new patient
@@ -281,7 +350,7 @@ app.post("/chat", async (req, res) => {
       // Synthetic first message — triggers a personalised welcome from the AI
       chatHistory.push({
         role: "user",
-        content: "Please greet me warmly by my name and ask how I am feeling today.",
+        content: "Please greet me warmly by my name and ask what body part or health problem is bothering me today.",
       });
     }
 
@@ -290,38 +359,79 @@ app.post("/chat", async (req, res) => {
       chatHistory = chatHistory.slice(-30);
     }
 
+    const clinicalSystem = currentPatient?.system === 'ayush' ? 'AYUSH (Ayurveda)' : 'Allopathic';
+
     // 🔥 AI CALL
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
-      temperature: 0.4,
+      temperature: 0.35,
       max_tokens: 600,
       messages: [
         {
           role: "system",
-          content: `You are Dr. Sanjeevni, a compassionate and experienced Indian Primary Health Centre (PHC) doctor.
+          content: `You are Sanjeevni AI, a friendly, compassionate, and experienced virtual Primary Health Centre (PHC) doctor for Indian patients.
+
+Your job is to conduct a safe, natural, human-like medical intake conversation. You are NOT a replacement for an in-person doctor and must never claim to provide a definitive diagnosis or prescription.
+
 ${currentPatient ? `
-PATIENT: ${currentPatient.name}, Age ${currentPatient.age}
-LANGUAGE: ${currentPatient.language === "hi-IN" ? "Hindi (Devanagari script ONLY)" : currentPatient.language === "mixed" ? "Hinglish (natural Hindi-English mix)" : "Simple Indian English"}
+CURRENT PATIENT:
+Name: ${currentPatient.name}
+Age: ${currentPatient.age}
+Patient ID: ${currentPatient.id}
+${currentPatient.abhaId ? `ABHA Health ID: ${currentPatient.abhaId}` : ""}
+System: ${clinicalSystem}
+Preferred Language: ${
+  currentPatient.language === "hi-IN"
+    ? "Hindi (Devanagari script ONLY)"
+    : currentPatient.language === "mixed"
+    ? "Hinglish (natural Hindi-English mix)"
+    : currentPatient.language === "bn-IN"
+    ? "Bengali"
+    : currentPatient.language === "kn-IN"
+    ? "Kannada"
+    : "Simple Indian English"
+}
+${currentPatient.pastVisits && currentPatient.pastVisits.length > 0 ? `
+PREVIOUS MEDICAL HISTORY & PAST VISITS (${currentPatient.pastVisits.length} past visit(s)):
+${currentPatient.pastVisits.map(v => `- [${v.date}] Pain Area: ${v.selectedBodyPart || 'General'} (Severity ${v.painSeverity || 5}/10): ${v.summary || 'Consultation completed.'}`).join("\n")}
 
-⚠ STRICT: Respond ONLY in the patient's chosen language above. Never switch languages.
-On the FIRST message, greet the patient warmly by name and ask their chief complaint.` : ""}
+CLINICAL INSTRUCTION FOR RETURNING PATIENTS:
+Warmly acknowledge that you have access to their past medical records (e.g. "I see you visited before for ${currentPatient.pastVisits[0]?.selectedBodyPart || 'health checkup'}"). Ask if current symptoms are related to past issues or if a new problem has arisen.
+` : ""}
+${currentPatient.selectedBodyPart ? `
+SELECTED BODY REGION: ${currentPatient.selectedBodyPart}
+PAIN SEVERITY RATING: ${currentPatient.painSeverity || 5}/10 (${currentPatient.painSeverityLabel || "Moderate"})
+CLINICAL INSTRUCTION FOR SEVERITY:
+- If severity is 8-10 or pain is in Chest/Head/Spine, express deep clinical care, ask if there is shortness of breath, radiating pain, or dizziness, and set "urgent": true if red flags appear.
+` : ""}
 
-CLINICAL APPROACH:
-- First, understand the chief complaint fully before suggesting anything
-- Ask ONE focused follow-up question per turn (not multiple at once)
-- Give clear, simple explanations — no medical jargon
-- If symptoms sound serious (chest pain, breathlessness, high fever >104°F, unconsciousness), immediately advise: "Please go to the nearest hospital/emergency right now."
-- Never make a definitive diagnosis — always recommend consulting a doctor in person
-- Be warm, reassuring, and human — not robotic or formal
+CLINICAL INTAKE APPROACH (${clinicalSystem}):
+${currentPatient.system === 'ayush' 
+  ? `- Use the Dashavidha Pariksha framework implicitly.
+- Probe Prakriti (constitution), Vikriti (imbalance), Agni (digestion), Koshtha (bowels), and Ahara-Vihara (diet/lifestyle).
+- Ask ONE focused question per turn.` 
+  : `- Use the SOCRATES framework for pain/symptoms (Site, Onset, Character, Radiation, Associated symptoms, Time course, Exacerbating/relieving factors, Severity).
+- Ask ONE focused follow-up question per turn.`}
 
-RESPONSE RULES:
-- Maximum 2 short messages per response
-- Each message max 2-3 sentences
-- Stay conversational, not lecture-style
-- Never repeat what was already said
+LANGUAGE REQUIREMENT:
+Respond ONLY in the patient's selected language above. Never switch languages unless changed by the user.
+` : ""}
 
-STRICT OUTPUT — Return ONLY valid JSON, no markdown, no extra text:
+CORE CLINICAL INTAKE RULES:
+- Ask ONE focused clarifying question per response (Duration, Severity, Pattern, Associated symptoms, Triggers, Context).
+- Do NOT ask multiple questions in a single response.
+- Do NOT jump to premature diagnoses, medicines, dosages, or home remedies.
+- Be warm, respectful, reassuring, and conversational.
+- Keep responses concise: maximum 1–2 short messages per turn (2-3 sentences each).
+
+EMERGENCY / RED-FLAG RULE:
+If the patient describes crushing chest pain, severe breathlessness, stroke symptoms (facial drop, weakness), loss of consciousness, uncontrolled bleeding, or very high fever (>104°F):
+- Set "urgent": true in the output JSON.
+- Immediately instruct them to seek emergency medical care or visit the nearest hospital emergency room.
+
+STRICT OUTPUT FORMAT — Return ONLY valid JSON, no markdown codeblocks, no extra text:
 {
+  "urgent": boolean,
   "messages": [
     {
       "text": "string",
@@ -331,15 +441,13 @@ STRICT OUTPUT — Return ONLY valid JSON, no markdown, no extra text:
   ]
 }
 
-EMOTION GUIDE (pick the most fitting):
-- Warm greeting → smile + Talking_1
-- Asking a question → thinking + Talking_0
-- Listening/acknowledging → nodding + Talking_2
-- Reassurance/encouragement → smile + Talking_2
-- Explanation → default + Talking_0
-- Worried about symptom → concerned + Talking_1
-- Serious/urgent symptom → sad + Talking_1
-- General conversation → default + Talking_0`,
+EMOTION & ANIMATION GUIDE:
+- Greeting / warm response → smile + Talking_1
+- Clarifying question → thinking + Talking_0
+- Listening / acknowledging → nodding + Talking_2
+- Reassurance / encouragement → smile + Talking_2
+- Concern about symptoms → concerned + Talking_1
+- Urgent / serious symptom → sad + Talking_1`,
         },
         ...chatHistory,
       ],
@@ -349,10 +457,13 @@ EMOTION GUIDE (pick the most fitting):
     console.log("🧠 Groq raw:", raw);
 
     let messages;
+    let parsed = null;
 
     // 🔹 Safe JSON parsing
     try {
-      const parsed = JSON.parse(raw);
+      // Remove any unintentional markdown fences if present
+      const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+      parsed = JSON.parse(cleaned);
       messages = parsed.messages || parsed;
     } catch (err) {
       console.error("❌ JSON parse error:", err);
@@ -376,7 +487,7 @@ EMOTION GUIDE (pick the most fitting):
       content: messages.map((m) => m.text).join(" "),
     });
 
-      // 🔊 TTS + Lipsync processing
+    // 🔊 TTS + Lipsync processing
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       const fileName = `audios/message_${i}.mp3`;
@@ -412,15 +523,127 @@ EMOTION GUIDE (pick the most fitting):
       }
     }
 
+    // Support "urgent" flag
+    if (parsed && parsed.urgent) {
+      console.log("🚨 URGENT FLAG DETECTED");
+      messages.unshift({
+        text: "🚨 URGENT: Red flag symptoms detected. Please proceed to triage immediately.",
+        facialExpression: "sad",
+        animation: "Talking_1",
+      });
+    }
+
     return res.send({ messages });
 
   } catch (error) {
     console.error("🔥 Chat route error:", error);
+    return res.status(500).send({ error: "Something went wrong in /chat", details: error.message });
+  }
+});
 
-    return res.status(500).send({
-      error: "Something went wrong in /chat",
-      details: error.message,
+app.post("/generate-summary", async (req, res) => {
+  try {
+    if (!currentPatient) {
+      return res.status(400).json({ error: "No patient session active." });
+    }
+    
+    const prompt = `You are a clinical summarization AI.
+Generate a structured physician-ready clinical summary from the following conversation.
+Use professional medical terminology in English, regardless of the conversation language.
+
+Patient Name: ${currentPatient.name}, Age: ${currentPatient.age}
+System: ${currentPatient.system === 'ayush' ? 'AYUSH (Ayurveda)' : 'Allopathic'}
+
+FORMAT:
+${currentPatient.system === 'ayush' 
+  ? `Chief Complaint:
+History of Present Illness:
+Dashavidha Pariksha Observations (Prakriti, Vikriti, Agni, Koshtha etc. if discussed):
+Ahara-Vihara (Diet & Lifestyle):` 
+  : `Chief Complaint:
+History of Present Illness (SOCRATES):
+Past Medical/Surgical History:
+Review of Systems:`}
+
+Conversation:
+${chatHistory.map(m => m.role.toUpperCase() + ": " + m.content).join("\n")}
+
+Return ONLY the markdown formatted summary.`;
+
+    const completion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      temperature: 0.2,
+      messages: [{ role: "user", content: prompt }]
     });
+
+    const summaryText = completion.choices[0]?.message?.content || "No summary could be generated.";
+
+    // Save visit to SQLite DB
+    try {
+      const insertVisit = db.prepare('INSERT INTO visits (patientId, date, selectedBodyPart, painSeverity, summary) VALUES (?, ?, ?, ?, ?)');
+      insertVisit.run(
+        String(currentPatient.id || '1001'), 
+        new Date().toISOString().split('T')[0], 
+        currentPatient?.selectedBodyPart || 'General', 
+        currentPatient?.painSeverity || 5, 
+        summaryText
+      );
+      console.log(`✅ Saved visit to database for patient ${currentPatient.id}`);
+    } catch (dbErr) {
+      console.error("⚠️ Failed to save visit to DB:", dbErr.message);
+    }
+
+    res.json({ success: true, summary: summaryText });
+  } catch (err) {
+    console.error("🔥 /generate-summary error:", err);
+    res.status(500).json({ error: "Failed to generate summary" });
+  }
+});
+
+app.post("/upload-document", upload.single('document'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    
+    console.log("📸 Processing uploaded document via Groq Vision...");
+    const base64Image = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype;
+    
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.2-11b-vision-preview",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "You are a clinical AI. Carefully read this medical document. Identify if it is a prescription, lab report, or discharge summary. Extract key clinical information: Date, Diagnoses, Medications (with dosage/frequency), and abnormal Lab Values. Present the findings clearly and concisely."
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`
+              }
+            }
+          ]
+        }
+      ]
+    });
+    
+    const extractedData = completion.choices[0]?.message?.content || "No text could be extracted.";
+    
+    // Inject the extracted data into the conversation history so the Avatar knows about it
+    chatHistory.push({
+      role: "system",
+      content: `[SYSTEM ALERT: The patient has uploaded a prior medical document before the consultation. Here is the AI-extracted summary of that document:\n\n${extractedData}\n\nAcknowledge this in your first response and use it to guide your history taking.]`
+    });
+    
+    res.json({ success: true, extractedData });
+  } catch (error) {
+    console.error("🔥 /upload-document error:", error);
+    res.status(500).json({ error: "Failed to process document", details: error.message });
   }
 });
 
@@ -484,36 +707,51 @@ Do not include pleasantries.`;
     await fs.writeFile(filename, `Name: ${name}\nAge: ${age}\nMobile: ${mobile}\nUUID: ${id}\n\nSummary:\n${summaryText}`);
     console.log(`✅ Summary text file generated: ${filename}`);
 
-    // 3. Send payload to Swasya AI doctor dashboard
-    console.log(`📤 Sending payload to Swasya AI backend at ${swasyaBaseUrl}...`);
-    const swasyaRes = await fetch(`${swasyaBaseUrl}/patients/avatar-summary`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        uhid: String(id),
-        name: name || "Unknown Avatar Patient",
-        age: age || "Unknown",
-        phone: mobile || "Unknown",
-        summary: summaryText
-      })
-    });
+    // 3. Send payload to Swasya AI doctor dashboard (non-blocking if Swasya is offline)
+    try {
+      console.log(`📤 Sending payload to Swasya AI backend at ${swasyaBaseUrl}...`);
+      const swasyaRes = await fetch(`${swasyaBaseUrl}/patients/avatar-summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uhid: String(id),
+          name: name || "Unknown Avatar Patient",
+          age: age || "Unknown",
+          phone: mobile || "Unknown",
+          summary: summaryText
+        })
+      });
 
-    if (!swasyaRes.ok) {
-      const errText = await swasyaRes.text();
-      console.error("Swasya AI Error:", errText);
-      throw new Error(`Doctor Dashboard integration failed: ${swasyaRes.status} ${errText}`);
+      if (!swasyaRes.ok) {
+        const errText = await swasyaRes.text();
+        console.warn("Swasya AI Warning:", errText);
+      }
+    } catch (swasyaErr) {
+      console.warn("⚠️ Swasya AI endpoint unreachable (local offline mode):", swasyaErr.message);
     }
 
-    res.json({ success: true, message: "Summary generated and sent to doctor successfully.", file: filename });
+    // 4. Save visit to SQLite DB
+    try {
+      const insertVisit = db.prepare('INSERT INTO visits (patientId, date, selectedBodyPart, painSeverity, summary) VALUES (?, ?, ?, ?, ?)');
+      insertVisit.run(
+        String(id), 
+        new Date().toISOString().split('T')[0], 
+        currentPatient?.selectedBodyPart || 'General', 
+        currentPatient?.painSeverity || 5, 
+        summaryText
+      );
+      console.log(`✅ Saved visit to database for patient ${id}`);
+    } catch (dbErr) {
+      console.error("⚠️ Failed to save visit to DB:", dbErr.message);
+    }
+
+    res.json({ success: true, summary: summaryText, message: "Summary generated and saved successfully.", file: filename });
 
   } catch (error) {
     console.error("🔥 /send-to-doctor error:", error);
     res.status(500).json({ error: "Failed to send to doctor", details: error.message });
   }
 });
-
-// latestTranscript is declared at the top of the file
-
 
 app.post("/lip-sync", async (req, res) => {
   try {
@@ -599,10 +837,31 @@ app.get("/get-avatar-payload", (req, res) => {
 });
 
 // ── Start server (always last, after all routes are registered) ─────────────
-app.listen(port, () => {
-  console.log(`Sanjeevni AI listening on port ${port}`);
-  console.log(`Rhubarb path: ${RHUBARB_PATH}`);
-  console.log(`FFmpeg path: ${FFMPEG_PATH}`);
-  console.log(`Murf voice: ${MURF_VOICE_ID}`);
-  console.log(`Murf locale: ${MURF_LOCALE}`);
-});
+const startServer = async () => {
+  if (process.platform === "linux") {
+    try {
+      await execCommand(`"${RHUBARB_PATH}" --version`);
+    } catch (e) {
+      console.log("Rhubarb not found globally. Setting up locally in /tmp...");
+      try {
+        await execCommand("wget -q https://github.com/DanielSWolf/rhubarb-lip-sync/releases/download/v1.13.0/Rhubarb-Lip-Sync-1.13.0-Linux.zip -O /tmp/rhubarb.zip");
+        await execCommand("unzip -o /tmp/rhubarb.zip -d /tmp/");
+        await execCommand("chmod +x /tmp/Rhubarb-Lip-Sync-1.13.0-Linux/rhubarb");
+        RHUBARB_PATH = "/tmp/Rhubarb-Lip-Sync-1.13.0-Linux/rhubarb";
+        console.log("Rhubarb downloaded and set up at " + RHUBARB_PATH);
+      } catch (dlErr) {
+        console.error("Failed to setup Rhubarb:", dlErr.message);
+      }
+    }
+  }
+
+  app.listen(port, () => {
+    console.log(`Sanjeevni AI listening on port ${port}`);
+    console.log(`Rhubarb path: ${RHUBARB_PATH}`);
+    console.log(`FFmpeg path: ${FFMPEG_PATH}`);
+    console.log(`Murf voice: ${MURF_VOICE_ID}`);
+    console.log(`Murf locale: ${MURF_LOCALE}`);
+  });
+};
+
+startServer();
