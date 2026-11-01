@@ -36,6 +36,9 @@ const port = process.env.PORT || 3125;
 // Groq model — change here if you want to upgrade/downgrade
 const GROQ_MODEL = process.env.GROQ_MODEL || "groq/compound-mini";
 
+// Swasya AI integration endpoint (defaults to deployed Render in production or localhost in dev)
+const SWASYA_API_URL = process.env.SWASYA_API_URL || (process.env.NODE_ENV === "production" ? "https://swasya-ai.onrender.com" : "http://localhost:8000");
+
 // ── Session Management (Fixes Multi-Patient & Multi-Kiosk Race Conditions) ──
 const sessions = new Map();
 
@@ -132,7 +135,7 @@ app.get("/api/patients", async (req, res) => {
   let combinedPatients = [...patientQueue];
 
   // Attempt to enrich with active Swasya AI queue if reachable
-  const swasyaBaseUrl = process.env.SWASYA_API_URL || "http://localhost:8000";
+  const swasyaBaseUrl = SWASYA_API_URL;
   try {
     const queueRes = await fetch(`${swasyaBaseUrl}/queue`, { signal: AbortSignal.timeout(1200) });
     if (queueRes.ok) {
@@ -181,7 +184,7 @@ app.get("/api/patient-lookup", async (req, res) => {
   }
 
   // 1. Look up in Swasya AI PHC database first for comprehensive hospital records
-  const swasyaBaseUrl = process.env.SWASYA_API_URL || "http://localhost:8000";
+  const swasyaBaseUrl = SWASYA_API_URL;
   try {
     const swasyaRes = await fetch(`${swasyaBaseUrl}/patients/check-uhid/${encodeURIComponent(query)}`, {
       signal: AbortSignal.timeout(2000)
@@ -825,7 +828,7 @@ app.post("/send-to-doctor", async (req, res) => {
     const { name, age, mobile, id } = req.body;
     
     // 1. Fetch history from Swasya AI
-    const swasyaBaseUrl = process.env.SWASYA_API_URL || "http://localhost:8000";
+    const swasyaBaseUrl = SWASYA_API_URL;
     let historyContext = "No previous medical history found in Swasya records.";
     try {
       console.log(`🔍 Fetching history for patient ${id} from Swasya at ${swasyaBaseUrl}...`);
