@@ -1,5 +1,5 @@
 
-import { useAnimations, useGLTF } from "@react-three/drei";
+import { useAnimations, useGLTF, useTexture } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { button, useControls } from "leva";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -155,36 +155,36 @@ function AttachToBone({ bone, children, position = [0, 0, 0], rotation = [0, 0, 
   );
 }
 
-// ── 🩺 3D Clinical Doctor Accessories (Physician Lab Coat, Scrubs, Stethoscope, ID Badge, Shoes) ────
-function DoctorAccessories({ spineNode, headNode, hipsNode, leftLegNode, rightLegNode, leftFootNode, rightFootNode }) {
-  // Anatomically shaped classic black medical stethoscope tubing
-  // Sits proudly at Z = +0.22 to +0.246 in front of chest - 100% visible, zero occlusion
+// ── 🩺 3D Clinical Doctor Accessories (Physician Lab Coat, Scrubs, Stethoscope, ID Badge, Hair) ────
+function DoctorAccessories({ spineNode, headNode, hipsNode }) {
+  // Clinical gauge stethoscope tubing (4.4mm diameter, Littmann Classic III style)
+  // Draped naturally around neck & shoulders, resting snugly against chest (Z = +0.208 to +0.220)
   const stethoscopeCurve = useMemo(() => {
     return new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, 0.135, -0.015),      // Behind neck
-      new THREE.Vector3(-0.082, 0.115, 0.05),    // Over left shoulder
-      new THREE.Vector3(-0.075, 0.025, 0.185),   // Left upper chest
-      new THREE.Vector3(-0.048, -0.065, 0.225),  // Left mid chest
-      new THREE.Vector3(-0.015, -0.13, 0.235),   // Approaching center yoke
-      new THREE.Vector3(0, -0.145, 0.238),       // Center yoke junction
-      new THREE.Vector3(0.015, -0.13, 0.235),    // Right approach
-      new THREE.Vector3(0.048, -0.065, 0.225),   // Right mid chest
-      new THREE.Vector3(0.075, 0.025, 0.185),    // Right upper chest
-      new THREE.Vector3(0.082, 0.115, 0.05),     // Over right shoulder
-      new THREE.Vector3(0, 0.135, -0.015)       // Back to neck
+      new THREE.Vector3(0, 0.134, -0.018),       // Behind neck
+      new THREE.Vector3(-0.076, 0.116, 0.042),   // Over left shoulder
+      new THREE.Vector3(-0.070, 0.030, 0.178),   // Left upper chest
+      new THREE.Vector3(-0.044, -0.060, 0.208),  // Left mid chest
+      new THREE.Vector3(-0.014, -0.126, 0.214),  // Approaching yoke
+      new THREE.Vector3(0, -0.140, 0.216),       // Center yoke junction
+      new THREE.Vector3(0.014, -0.126, 0.214),   // Right approach
+      new THREE.Vector3(0.044, -0.060, 0.208),   // Right mid chest
+      new THREE.Vector3(0.070, 0.030, 0.178),    // Right upper chest
+      new THREE.Vector3(0.076, 0.116, 0.042),    // Over right shoulder
+      new THREE.Vector3(0, 0.134, -0.018)        // Back behind neck
     ]);
   }, []);
 
   const extensionCurve = useMemo(() => {
     return new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, -0.145, 0.238),
-      new THREE.Vector3(0.012, -0.18, 0.242),
-      new THREE.Vector3(0.02, -0.215, 0.246)
+      new THREE.Vector3(0, -0.140, 0.216),
+      new THREE.Vector3(0.010, -0.165, 0.218),
+      new THREE.Vector3(0.016, -0.190, 0.220)
     ]);
   }, []);
 
-  const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.0075, 12, false), [stethoscopeCurve]);
-  const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 24, 0.0065, 10, false), [extensionCurve]);
+  const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.0022, 12, false), [stethoscopeCurve]);
+  const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 20, 0.0020, 10, false), [extensionCurve]);
 
   // 🏷️ Crisp Hospital ID Badge Texture (SANJEEVNI AI • AI HEALTHCARE ASSISTANT)
   const badgeTexture = useMemo(() => {
@@ -259,65 +259,68 @@ function DoctorAccessories({ spineNode, headNode, hipsNode, leftLegNode, rightLe
 
   return (
     <>
-      {/* ── 🥼 Torso Accessories: Stethoscope, Notched Lapels, Scrubs, Badge, Pen (attached to Spine2) ── */}
+      {/* ── 🥼 Torso: Physician Lab Coat, Scrubs, Stethoscope, ID Badge (Spine2-anchored) ── */}
       {spineNode && (
         <AttachToBone bone={spineNode}>
-          {/* 🥼 White Doctor's Lab Coat Structured Notched Lapels */}
-          {/* Lab coat back neck collar band */}
+          {/* 🥼 Lab coat back neck collar band */}
           <mesh position={[0, 0.138, -0.015]} rotation={[0.2, 0, 0]}>
-            <boxGeometry args={[0.14, 0.038, 0.02]} />
+            <boxGeometry args={[0.148, 0.038, 0.02]} />
             <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
           </mesh>
 
-          {/* Left Notched Lapel (folded outward over left chest) */}
-          <group position={[-0.062, 0.025, 0.20]} rotation={[0.06, -0.10, -0.20]}>
-            <mesh position={[0, 0.05, 0]}>
-              <boxGeometry args={[0.048, 0.075, 0.008]} />
+          {/* 🥼 Left Notched Lapel (folded outward over left chest) */}
+          <group position={[-0.060, 0.025, 0.198]} rotation={[0.06, -0.10, -0.20]}>
+            <mesh position={[0, 0.048, 0]}>
+              <boxGeometry args={[0.046, 0.075, 0.008]} />
               <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
             </mesh>
             <mesh position={[-0.008, -0.055, 0]}>
-              <boxGeometry args={[0.054, 0.125, 0.008]} />
+              <boxGeometry args={[0.052, 0.125, 0.008]} />
               <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
             </mesh>
           </group>
 
-          {/* Right Notched Lapel (folded outward over right chest) */}
-          <group position={[0.062, 0.025, 0.20]} rotation={[0.06, 0.10, 0.20]}>
-            <mesh position={[0, 0.05, 0]}>
-              <boxGeometry args={[0.048, 0.075, 0.008]} />
+          {/* 🥼 Right Notched Lapel (folded outward over right chest) */}
+          <group position={[0.060, 0.025, 0.198]} rotation={[0.06, 0.10, 0.20]}>
+            <mesh position={[0, 0.048, 0]}>
+              <boxGeometry args={[0.046, 0.075, 0.008]} />
               <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
             </mesh>
             <mesh position={[0.008, -0.055, 0]}>
-              <boxGeometry args={[0.054, 0.125, 0.008]} />
+              <boxGeometry args={[0.052, 0.125, 0.008]} />
               <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
             </mesh>
           </group>
 
-          {/* White Lab Coat Front Buttons */}
-          <mesh position={[-0.006, -0.08, 0.215]} rotation={[Math.PI / 2, 0, 0]}>
+          {/* 🥼 White Physician Front Coat Buttons */}
+          <mesh position={[0.046, 0.01, 0.192]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.006, 0.006, 0.004, 16]} />
             <meshStandardMaterial color="#F8FAFC" roughness={0.3} />
           </mesh>
-          <mesh position={[-0.006, -0.14, 0.22]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh position={[0.046, -0.06, 0.194]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.006, 0.006, 0.004, 16]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.3} />
+          </mesh>
+          <mesh position={[0.046, -0.13, 0.196]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.006, 0.006, 0.004, 16]} />
             <meshStandardMaterial color="#F8FAFC" roughness={0.3} />
           </mesh>
 
           {/* 🥼 Inner Dark Teal Medical Scrubs V-Neck (under coat) */}
-          <group position={[0, -0.01, 0.19]} rotation={[0.10, 0, 0]}>
-            {/* Left V-neck collar band */}
-            <mesh position={[-0.038, 0.045, 0.002]} rotation={[0, 0, 0.44]}>
-              <boxGeometry args={[0.018, 0.14, 0.006]} />
+          <group position={[0, -0.01, 0.186]} rotation={[0.08, 0, 0]}>
+            {/* Left V-neck collar trim band */}
+            <mesh position={[-0.034, 0.045, 0.003]} rotation={[0, 0, 0.42]}>
+              <boxGeometry args={[0.016, 0.14, 0.005]} />
               <meshStandardMaterial color="#084C53" roughness={0.80} />
             </mesh>
-            {/* Right V-neck collar band */}
-            <mesh position={[0.038, 0.045, 0.002]} rotation={[0, 0, -0.44]}>
-              <boxGeometry args={[0.018, 0.14, 0.006]} />
+            {/* Right V-neck collar trim band */}
+            <mesh position={[0.034, 0.045, 0.003]} rotation={[0, 0, -0.42]}>
+              <boxGeometry args={[0.016, 0.14, 0.005]} />
               <meshStandardMaterial color="#084C53" roughness={0.80} />
             </mesh>
-            {/* Inner scrub chest fabric (seamlessly filling the opening between coat lapels) */}
-            <mesh position={[0, -0.04, 0]}>
-              <boxGeometry args={[0.13, 0.24, 0.004]} />
+            {/* Inner scrub chest fabric (conforming smoothly between open coat lapels) */}
+            <mesh position={[0, -0.035, 0]}>
+              <boxGeometry args={[0.115, 0.23, 0.004]} />
               <meshStandardMaterial color="#084C53" roughness={0.85} />
             </mesh>
           </group>
@@ -333,73 +336,79 @@ function DoctorAccessories({ spineNode, headNode, hipsNode, leftLegNode, rightLe
           </mesh>
 
           {/* Binaural metal tension spring behind neck */}
-          <mesh position={[0, 0.135, -0.01]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.0045, 0.0045, 0.04, 16]} />
+          <mesh position={[0, 0.134, -0.015]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.0026, 0.0026, 0.04, 16]} />
             <meshStandardMaterial color="#E2E8F0" metalness={0.96} roughness={0.12} />
           </mesh>
 
-          {/* 🩺 Stethoscope Dual-Sided Heavy Chrome Acoustic Chestpiece */}
-          <group position={[0.02, -0.215, 0.246]} rotation={[Math.PI / 2, 0, 0]}>
-            {/* Outer Chrome body */}
+          {/* 🩺 Stethoscope Dual-Sided Chrome Acoustic Chestpiece (32mm clinical diameter) */}
+          <group position={[0.016, -0.192, 0.220]} rotation={[Math.PI / 2, 0, 0]}>
+            {/* Acoustic Connecting Stem */}
+            <mesh position={[0, -0.007, 0]}>
+              <cylinderGeometry args={[0.003, 0.003, 0.010, 16]} />
+              <meshStandardMaterial color="#FFFFFF" metalness={0.98} roughness={0.08} />
+            </mesh>
+            {/* Outer Chrome Body */}
             <mesh>
-              <cylinderGeometry args={[0.024, 0.024, 0.012, 32]} />
+              <cylinderGeometry args={[0.016, 0.016, 0.007, 32]} />
               <meshStandardMaterial color="#FFFFFF" metalness={0.98} roughness={0.08} />
             </mesh>
             {/* Dark non-chill rim */}
-            <mesh position={[0, 0.006, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.023, 0.0026, 8, 32]} />
+            <mesh position={[0, 0.0036, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.0152, 0.0016, 8, 32]} />
               <meshStandardMaterial color="#111111" roughness={0.8} />
             </mesh>
-            {/* Tunable Diaphragm Membrane */}
-            <mesh position={[0, 0.0065, 0]}>
-              <cylinderGeometry args={[0.021, 0.021, 0.0015, 32]} />
+            {/* Tunable Diaphragm Membrane (Sky Blue) */}
+            <mesh position={[0, 0.0039, 0]}>
+              <cylinderGeometry args={[0.0145, 0.0145, 0.001, 32]} />
               <meshStandardMaterial color="#38BDF8" metalness={0.3} roughness={0.35} />
             </mesh>
             {/* Reverse pediatric bell */}
-            <mesh position={[0, -0.0065, 0]}>
-              <cylinderGeometry args={[0.016, 0.016, 0.004, 24]} />
+            <mesh position={[0, -0.0045, 0]}>
+              <cylinderGeometry args={[0.011, 0.011, 0.003, 24]} />
               <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
             </mesh>
           </group>
 
           {/* 🩺 Chrome Binaural Tubes rising towards ears */}
-          <mesh position={[-0.048, 0.18, 0.06]} rotation={[0.2, 0, -0.15]}>
-            <cylinderGeometry args={[0.004, 0.004, 0.09, 16]} />
+          <mesh position={[-0.046, 0.175, 0.055]} rotation={[0.2, 0, -0.14]}>
+            <cylinderGeometry args={[0.0022, 0.0022, 0.085, 16]} />
             <meshStandardMaterial color="#E2E8F0" metalness={0.96} roughness={0.12} />
           </mesh>
-          <mesh position={[0.048, 0.18, 0.06]} rotation={[0.2, 0, 0.15]}>
-            <cylinderGeometry args={[0.004, 0.004, 0.09, 16]} />
+          <mesh position={[0.046, 0.175, 0.055]} rotation={[0.2, 0, 0.14]}>
+            <cylinderGeometry args={[0.0022, 0.0022, 0.085, 16]} />
             <meshStandardMaterial color="#E2E8F0" metalness={0.96} roughness={0.12} />
           </mesh>
           {/* Black Silicone Ear Tips */}
-          <mesh position={[-0.058, 0.225, 0.075]}>
-            <sphereGeometry args={[0.006, 12, 12]} />
+          <mesh position={[-0.052, 0.218, 0.068]}>
+            <sphereGeometry args={[0.0042, 12, 12]} />
             <meshStandardMaterial color="#111111" roughness={0.8} />
           </mesh>
-          <mesh position={[0.058, 0.225, 0.075]}>
-            <sphereGeometry args={[0.006, 12, 12]} />
+          <mesh position={[0.052, 0.218, 0.068]}>
+            <sphereGeometry args={[0.0042, 12, 12]} />
             <meshStandardMaterial color="#111111" roughness={0.8} />
           </mesh>
 
           {/* 🥼 Coat Upper Chest Pocket with Clinical Pen & Official ID Badge */}
-          <group position={[-0.088, -0.02, 0.205]} rotation={[0, 0.18, -0.04]}>
+          <group position={[-0.088, -0.02, 0.202]} rotation={[0, 0.16, -0.04]}>
+            {/* Pocket welt stitch border */}
             <mesh position={[0, 0.035, 0.001]}>
-              <boxGeometry args={[0.055, 0.005, 0.004]} />
+              <boxGeometry args={[0.054, 0.005, 0.004]} />
               <meshStandardMaterial color="#E2E8F0" roughness={0.9} />
             </mesh>
-            {/* Medical Pen */}
+            {/* Clinical Diagnostic Silver Pen */}
             <mesh position={[0.014, 0.042, 0.006]} rotation={[0.08, 0, -0.05]}>
-              <cylinderGeometry args={[0.0028, 0.0028, 0.048, 12]} />
+              <cylinderGeometry args={[0.0028, 0.0028, 0.046, 12]} />
               <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
             </mesh>
             {/* 🏷️ Doctor's Official Hospital ID Badge (SANJEEVNI AI) */}
             <group position={[0, 0, 0.006]}>
-              <mesh position={[0, 0.04, 0.002]}>
+              <mesh position={[0, 0.038, 0.002]}>
                 <boxGeometry args={[0.014, 0.009, 0.004]} />
                 <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
               </mesh>
               <mesh position={[0, 0, 0]}>
-                <boxGeometry args={[0.054, 0.075, 0.003]} />
+                <boxGeometry args={[0.048, 0.068, 0.003]} />
                 <meshStandardMaterial map={badgeTexture} roughness={0.3} />
               </mesh>
             </group>
@@ -407,66 +416,35 @@ function DoctorAccessories({ spineNode, headNode, hipsNode, leftLegNode, rightLe
         </AttachToBone>
       )}
 
-      {/* ── 🥼 Lower Knee-Length Doctor Coat Skirt & Hip Pockets (Hips-anchored) ── */}
+      {/* ── 🥼 Lower Knee-Length Doctor Coat Skirt & Lower Medical Pockets (Hips-anchored) ── */}
       {hipsNode && (
         <AttachToBone bone={hipsNode}>
-          {/* Left Coat Skirt Panel (reaching knees, structured straight physician lab coat cut) */}
-          <mesh position={[-0.105, -0.22, 0.135]} rotation={[0, 0.08, -0.02]}>
-            <boxGeometry args={[0.17, 0.44, 0.012]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
+          {/* Smooth Continuous Curved Lab Coat Mantle (reaching knee level, 12cm open front split) */}
+          <mesh position={[0, -0.22, 0.01]}>
+            <cylinderGeometry args={[0.182, 0.208, 0.44, 32, 1, true, 0.38, Math.PI * 2 - 0.76]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.85} side={THREE.DoubleSide} />
           </mesh>
-          {/* Left Lower Hip Medical Patch Pocket */}
-          <mesh position={[-0.125, -0.20, 0.148]} rotation={[0, 0.08, -0.02]}>
-            <boxGeometry args={[0.088, 0.105, 0.006]} />
+
+          {/* Left Lower Medical Patch Pocket (85mm x 105mm) */}
+          <mesh position={[-0.125, -0.20, 0.155]} rotation={[0, 0.22, -0.02]}>
+            <boxGeometry args={[0.085, 0.105, 0.006]} />
             <meshStandardMaterial color="#FFFFFF" roughness={0.88} />
           </mesh>
 
-          {/* Right Coat Skirt Panel (reaching knees, structured straight physician lab coat cut) */}
-          <mesh position={[0.105, -0.22, 0.135]} rotation={[0, -0.08, 0.02]}>
-            <boxGeometry args={[0.17, 0.44, 0.012]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
-          </mesh>
-          {/* Right Lower Hip Medical Patch Pocket */}
-          <mesh position={[0.125, -0.20, 0.148]} rotation={[0, -0.08, 0.02]}>
-            <boxGeometry args={[0.088, 0.105, 0.006]} />
+          {/* Right Lower Medical Patch Pocket (85mm x 105mm) */}
+          <mesh position={[0.125, -0.20, 0.155]} rotation={[0, -0.22, 0.02]}>
+            <boxGeometry args={[0.085, 0.105, 0.006]} />
             <meshStandardMaterial color="#FFFFFF" roughness={0.88} />
           </mesh>
 
-          {/* Left side coat wrap */}
-          <mesh position={[-0.17, -0.22, 0.02]} rotation={[0, Math.PI / 2, 0]}>
-            <boxGeometry args={[0.22, 0.44, 0.012]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
+          {/* Lower Front Coat Buttons (continuing physician closure line) */}
+          <mesh position={[0.058, -0.08, 0.176]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.006, 0.006, 0.004, 16]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.3} />
           </mesh>
-
-          {/* Right side coat wrap */}
-          <mesh position={[0.17, -0.22, 0.02]} rotation={[0, -Math.PI / 2, 0]}>
-            <boxGeometry args={[0.22, 0.44, 0.012]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
-          </mesh>
-
-          {/* Back Coat Vent Panel */}
-          <mesh position={[0, -0.22, -0.11]} rotation={[-0.04, 0, 0]}>
-            <boxGeometry args={[0.30, 0.44, 0.012]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.85} />
-          </mesh>
-        </AttachToBone>
-      )}
-
-      {/* ── 👖 Straight-Leg Medical Scrub Trousers (Left & Right Leg, Knee to Ankle) ── */}
-      {leftLegNode && (
-        <AttachToBone bone={leftLegNode} position={[0, 0.22, 0.005]}>
-          <mesh>
-            <cylinderGeometry args={[0.076, 0.078, 0.44, 32]} />
-            <meshStandardMaterial color="#084C53" roughness={0.90} />
-          </mesh>
-        </AttachToBone>
-      )}
-
-      {rightLegNode && (
-        <AttachToBone bone={rightLegNode} position={[0, 0.22, 0.005]}>
-          <mesh>
-            <cylinderGeometry args={[0.076, 0.078, 0.44, 32]} />
-            <meshStandardMaterial color="#084C53" roughness={0.90} />
+          <mesh position={[0.062, -0.16, 0.180]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.006, 0.006, 0.004, 16]} />
+            <meshStandardMaterial color="#F8FAFC" roughness={0.3} />
           </mesh>
         </AttachToBone>
       )}
@@ -483,49 +461,14 @@ function DoctorAccessories({ spineNode, headNode, hipsNode, leftLegNode, rightLe
             {/* Neatly tied low ponytail / bun (Natural Black Hair) */}
             <mesh position={[0, -0.015, -0.012]}>
               <sphereGeometry args={[0.032, 16, 16]} />
-              <meshStandardMaterial color="#121110" roughness={0.52} />
+              <meshStandardMaterial color="#141312" roughness={0.55} />
             </mesh>
             {/* Ponytail lower tail resting neatly against upper nape */}
             <mesh position={[0, -0.05, -0.018]} rotation={[0.1, 0, 0]}>
               <cylinderGeometry args={[0.014, 0.008, 0.08, 12]} />
-              <meshStandardMaterial color="#121110" roughness={0.52} />
+              <meshStandardMaterial color="#141312" roughness={0.55} />
             </mesh>
           </group>
-        </AttachToBone>
-      )}
-
-      {/* ── 👟 Clean White Medical Shoes / Sneakers (Left & Right Foot) ── */}
-      {leftFootNode && (
-        <AttachToBone bone={leftFootNode} position={[0, -0.065, 0.04]} rotation={[0.4, 0, 0]}>
-          <mesh position={[0, 0.02, 0.02]}>
-            <boxGeometry args={[0.088, 0.055, 0.17]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, 0.015, 0.09]}>
-            <cylinderGeometry args={[0.042, 0.044, 0.05, 16]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, -0.012, 0.02]}>
-            <boxGeometry args={[0.092, 0.024, 0.19]} />
-            <meshStandardMaterial color="#E2E8F0" roughness={0.7} />
-          </mesh>
-        </AttachToBone>
-      )}
-
-      {rightFootNode && (
-        <AttachToBone bone={rightFootNode} position={[0, -0.065, 0.04]} rotation={[0.4, 0, 0]}>
-          <mesh position={[0, 0.02, 0.02]}>
-            <boxGeometry args={[0.088, 0.055, 0.17]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, 0.015, 0.09]}>
-            <cylinderGeometry args={[0.042, 0.044, 0.05, 16]} />
-            <meshStandardMaterial color="#FFFFFF" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, -0.012, 0.02]}>
-            <boxGeometry args={[0.092, 0.024, 0.19]} />
-            <meshStandardMaterial color="#E2E8F0" roughness={0.7} />
-          </mesh>
         </AttachToBone>
       )}
     </>
@@ -536,6 +479,10 @@ export function Avatar(props) {
   const { nodes, materials, scene } = useGLTF(
     "/models/64f1a714fe61576b46f27ca2.glb"
   );
+  const [faceTexture, eyeTexture] = useTexture([
+    "/models/doctor_face.png",
+    "/models/doctor_eye.png",
+  ]);
 
   const { message, onMessagePlayed, chat } = useChat();
 
@@ -627,29 +574,69 @@ export function Avatar(props) {
       materials.Wolf3D_Outfit_Bottom.needsUpdate = true;
     }
 
+    if (nodes?.Wolf3D_Outfit_Top?.geometry) {
+      // Cleanly remove dress skirt triangles (where all 3 vertices are Y < 1.025)
+      // This leaves a clean tailored physician coat upper without any wrap-dress flaps or stretched polygons
+      const geom = nodes.Wolf3D_Outfit_Top.geometry;
+      if (geom.index && !geom.userData.skirtFiltered) {
+        geom.userData.skirtFiltered = true;
+        const pos = geom.attributes.position;
+        const origIndices = geom.index.array;
+        const kept = [];
+        for (let i = 0; i < origIndices.length; i += 3) {
+          const i0 = origIndices[i];
+          const i1 = origIndices[i + 1];
+          const i2 = origIndices[i + 2];
+          const isSkirt = pos.getY(i0) < 1.025 && pos.getY(i1) < 1.025 && pos.getY(i2) < 1.025;
+          if (!isSkirt) {
+            kept.push(i0, i1, i2);
+          }
+        }
+        geom.setIndex(new THREE.BufferAttribute(new Uint16Array(kept), 1));
+        geom.computeVertexNormals();
+      }
+    }
+
     if (nodes?.Wolf3D_Outfit_Footwear?.geometry && materials?.Wolf3D_Outfit_Footwear) {
-      // Replace Black Boots: Vertex colors seamlessly turn upper boot shaft into dark teal scrub pant legs,
-      // and foot into clean white medical sneakers!
+      // Slenderize footwear boot shaft to straight-leg scrub trousers & turn feet into white medical sneakers
       const geom = nodes.Wolf3D_Outfit_Footwear.geometry;
       const pos = geom.attributes.position;
       if (pos) {
         const scrubColor = new THREE.Color("#084C53");
         const colors = new Float32Array(pos.count * 3);
         for (let i = 0; i < pos.count; i++) {
+          let x = pos.getX(i);
           const y = pos.getY(i);
-          if (y < 0.088) {
-            // Clean White Medical Shoes
-            colors[i * 3 + 0] = 1.0;
-            colors[i * 3 + 1] = 1.0;
-            colors[i * 3 + 2] = 1.0;
-          } else {
-            // Dark Teal Scrub Trousers (#0B4F56) in Linear sRGB
+          let z = pos.getZ(i);
+
+          if (y >= 0.088) {
+            // Straight-leg scrub trousers:
+            // Slenderize chunky boot shaft to anatomical scrub trouser profile
+            const isLeft = x < 0;
+            const xc = isLeft ? -0.1669 : 0.1669;
+            const zc = -0.0199;
+            const dx = x - xc;
+            const dz = z - zc;
+            const r = Math.sqrt(dx * dx + dz * dz);
+            const rMax = 0.052 + 0.004 * (y / 0.45);
+            if (r > rMax && r > 0.001) {
+              const scale = rMax / r;
+              pos.setXYZ(i, xc + dx * scale, y, zc + dz * scale);
+            }
             colors[i * 3 + 0] = scrubColor.r;
             colors[i * 3 + 1] = scrubColor.g;
             colors[i * 3 + 2] = scrubColor.b;
+          } else {
+            // Clean white medical athletic sneakers with light gray rubber sole
+            const isSole = y < 0.024;
+            colors[i * 3 + 0] = isSole ? 0.88 : 1.0;
+            colors[i * 3 + 1] = isSole ? 0.91 : 1.0;
+            colors[i * 3 + 2] = isSole ? 0.94 : 1.0;
           }
         }
+        pos.needsUpdate = true;
         geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        geom.computeVertexNormals();
       }
       materials.Wolf3D_Outfit_Footwear.vertexColors = true;
       materials.Wolf3D_Outfit_Footwear.color = new THREE.Color(1, 1, 1);
@@ -664,8 +651,8 @@ export function Avatar(props) {
 
     if (materials?.Wolf3D_Hair) {
       // Naturally styled black / dark espresso hair
-      materials.Wolf3D_Hair.color = new THREE.Color("#121110");
-      materials.Wolf3D_Hair.roughness = 0.52;
+      materials.Wolf3D_Hair.color = new THREE.Color("#141312");
+      materials.Wolf3D_Hair.roughness = 0.55;
       materials.Wolf3D_Hair.metalness = 0.04;
       if (materials.Wolf3D_Hair.map) {
         materials.Wolf3D_Hair.map = null;
@@ -673,30 +660,35 @@ export function Avatar(props) {
       materials.Wolf3D_Hair.needsUpdate = true;
     }
 
-    if (materials?.Wolf3D_Skin) {
-      // Natural medium Indian skin tone (mature, non-plastic, non-doll)
-      materials.Wolf3D_Skin.color = new THREE.Color("#D2966E");
-      materials.Wolf3D_Skin.roughness = 0.65;
+    if (materials?.Wolf3D_Skin && faceTexture) {
+      faceTexture.encoding = THREE.sRGBEncoding;
+      faceTexture.flipY = false;
+      materials.Wolf3D_Skin.map = faceTexture;
+      // Natural warm medium Indian golden-olive skin tone
+      materials.Wolf3D_Skin.color = new THREE.Color("#C88E62");
+      materials.Wolf3D_Skin.roughness = 0.68;
       materials.Wolf3D_Skin.metalness = 0.0;
       materials.Wolf3D_Skin.needsUpdate = true;
     }
 
     if (materials?.Wolf3D_Body) {
-      // Matching natural medium Indian skin tone for hands and exposed skin
-      materials.Wolf3D_Body.color = new THREE.Color("#D2966E");
-      materials.Wolf3D_Body.roughness = 0.65;
+      // Matching natural medium Indian skin tone for hands and neck
+      materials.Wolf3D_Body.color = new THREE.Color("#C88E62");
+      materials.Wolf3D_Body.roughness = 0.68;
       materials.Wolf3D_Body.metalness = 0.0;
       materials.Wolf3D_Body.needsUpdate = true;
     }
 
-    if (materials?.Wolf3D_Eye) {
-      // Expressive dark brown eyes with clear reflective cornea
-      materials.Wolf3D_Eye.color = new THREE.Color("#2E1808");
-      materials.Wolf3D_Eye.roughness = 0.12;
-      materials.Wolf3D_Eye.metalness = 0.06;
+    if (materials?.Wolf3D_Eye && eyeTexture) {
+      eyeTexture.encoding = THREE.sRGBEncoding;
+      eyeTexture.flipY = false;
+      materials.Wolf3D_Eye.map = eyeTexture;
+      materials.Wolf3D_Eye.color = new THREE.Color(1, 1, 1);
+      materials.Wolf3D_Eye.roughness = 0.08;
+      materials.Wolf3D_Eye.metalness = 0.04;
       materials.Wolf3D_Eye.needsUpdate = true;
     }
-  }, [materials]);
+  }, [materials, nodes, faceTexture, eyeTexture]);
 
   // ── Unlock AudioContext for autoplay inside iframe ─────────────────────────
   const unlockAndPlay = (audio) => {
@@ -1043,10 +1035,6 @@ export function Avatar(props) {
           spineNode={nodes.Spine2}
           headNode={nodes.Head}
           hipsNode={nodes.Hips}
-          leftLegNode={nodes.LeftLeg}
-          rightLegNode={nodes.RightLeg}
-          leftFootNode={nodes.LeftFoot}
-          rightFootNode={nodes.RightFoot}
         />
       )}
     </group>
@@ -1055,3 +1043,5 @@ export function Avatar(props) {
 
 useGLTF.preload("/models/64f1a714fe61576b46f27ca2.glb");
 useGLTF.preload("/models/animations.glb");
+useTexture.preload("/models/doctor_face.png");
+useTexture.preload("/models/doctor_eye.png");
