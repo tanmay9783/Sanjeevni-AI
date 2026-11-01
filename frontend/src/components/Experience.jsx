@@ -42,14 +42,17 @@ export const Experience = () => {
   const { cameraZoomed } = useChat();
 
   useEffect(() => {
-    cameraControls.current?.setLookAt(0, 2, 5, 0, 1.5, 0);
+    // Full-body front-facing centered view: head to feet, arms and posture naturally visible
+    cameraControls.current?.setLookAt(0, 1.1, 3.5, 0, 0.92, 0);
   }, []);
 
   useEffect(() => {
     if (cameraZoomed) {
-      cameraControls.current?.setLookAt(0, 1.5, 1.5, 0, 1.5, 0, true);
+      // Attentive close-up for conversational consultation
+      cameraControls.current?.setLookAt(0, 1.45, 1.5, 0, 1.45, 0, true);
     } else {
-      cameraControls.current?.setLookAt(0, 2.2, 5, 0, 1.0, 0, true);
+      // Natural full-body clinical presence
+      cameraControls.current?.setLookAt(0, 1.1, 3.5, 0, 0.92, 0, true);
     }
   }, [cameraZoomed]);
 
@@ -57,15 +60,16 @@ export const Experience = () => {
     <>
       <CameraControls ref={cameraControls} />
 
-      {/* 🔹 Core 3-Point Studio Lighting (Guarantees scene & avatar are illuminated even if HDR preset fails) */}
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
-      <directionalLight position={[-5, 5, -5]} intensity={0.4} />
-      <pointLight position={[0, 2, 2]} intensity={0.5} />
+      {/* 🔹 Professional Medical Studio Lighting (Soft Key, Fill, Rim & Catchlight) */}
+      <ambientLight intensity={0.75} color="#F8FAFC" />
+      <directionalLight position={[2.5, 4.5, 3.5]} intensity={1.15} castShadow color="#FFFDF7" />
+      <directionalLight position={[-3.5, 3.0, 2.0]} intensity={0.65} color="#E0F2FE" />
+      <directionalLight position={[0, 3.5, -2.5]} intensity={0.5} color="#CCFBF1" />
+      <pointLight position={[0, 1.7, 1.5]} intensity={0.35} color="#FFFFFF" />
 
       {/* Wrapping Environment into Suspense so CDN delays/blocks never hang the 3D scene */}
       <Suspense fallback={null}>
-        <Environment preset="sunset" />
+        <Environment preset="city" />
       </Suspense>
 
       {/* Wrapping Dots into Suspense to prevent Blink when Troika/Font is loaded */}
@@ -77,7 +81,7 @@ export const Experience = () => {
         <Avatar />
       </Suspense>
 
-      <ContactShadows opacity={0.7} />
+      <ContactShadows opacity={0.5} scale={10} blur={2.5} far={4} color="#0D9488" />
     </>
   );
 };

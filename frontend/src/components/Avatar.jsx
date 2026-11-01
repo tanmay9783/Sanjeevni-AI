@@ -7,7 +7,15 @@ import * as THREE from "three";
 import { useChat } from "../hooks/useChat";
 
 const facialExpressions = {
-  default: {},
+  default: {
+    mouthSmileLeft: 0.22,
+    mouthSmileRight: 0.22,
+    eyeSquintLeft: 0.12,
+    eyeSquintRight: 0.12,
+    browInnerUp: 0.08,
+    cheekSquintLeft: 0.15,
+    cheekSquintRight: 0.15,
+  },
   smile: {
     browInnerUp: 0.17,
     eyeSquintLeft: 0.4,
@@ -167,6 +175,77 @@ function DoctorAccessories({ spineNode, headNode }) {
   const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.0055, 12, false), [stethoscopeCurve]);
   const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 24, 0.0045, 10, false), [extensionCurve]);
 
+  // 🏷️ Crisp Hospital ID Badge Texture (SANJEEVNI AI • AI HEALTHCARE ASSISTANT)
+  const badgeTexture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 720;
+    const ctx = canvas.getContext("2d");
+
+    // White Card Base
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, 512, 720);
+
+    // Subtle edge border
+    ctx.strokeStyle = "#CBD5E1";
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, 502, 710);
+
+    // Header Teal Banner
+    ctx.fillStyle = "#0D9488";
+    ctx.fillRect(0, 0, 512, 160);
+
+    // SANJEEVNI AI Title
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 50px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("SANJEEVNI AI", 256, 100);
+
+    // Sub-banner
+    ctx.fillStyle = "#0F766E";
+    ctx.fillRect(0, 160, 512, 65);
+    ctx.fillStyle = "#CCFBF1";
+    ctx.font = "bold 24px system-ui, sans-serif";
+    ctx.fillText("AI HEALTHCARE ASSISTANT", 256, 203);
+
+    // Doctor photo / emblem frame
+    ctx.fillStyle = "#F8FAFC";
+    ctx.strokeStyle = "#94A3B8";
+    ctx.lineWidth = 4;
+    ctx.fillRect(156, 255, 200, 200);
+    ctx.strokeRect(156, 255, 200, 200);
+
+    // Medical Red Cross inside photo box
+    ctx.fillStyle = "#EF4444";
+    ctx.fillRect(236, 290, 40, 130);
+    ctx.fillRect(191, 335, 130, 40);
+
+    // Doctor Name & Credentials
+    ctx.fillStyle = "#0F172A";
+    ctx.font = "bold 36px system-ui, sans-serif";
+    ctx.fillText("DR. SANJEEVNI", 256, 515);
+
+    ctx.fillStyle = "#0D9488";
+    ctx.font = "600 22px system-ui, sans-serif";
+    ctx.fillText("CLINICAL AI PRACTITIONER", 256, 555);
+
+    // Department & Badge ID
+    ctx.fillStyle = "#64748B";
+    ctx.font = "18px monospace";
+    ctx.fillText("ID: SNJ-2026-AI • OPD GENERAL", 256, 615);
+
+    // Golden Security Microchip
+    ctx.fillStyle = "#F59E0B";
+    ctx.fillRect(226, 640, 60, 40);
+    ctx.strokeStyle = "#B45309";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(226, 640, 60, 40);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 16;
+    return texture;
+  }, []);
+
   // Synchronize accessories to skeleton bones on each render frame
   useFrame(() => {
     if (spineRef.current && spineNode) {
@@ -285,40 +364,17 @@ function DoctorAccessories({ spineNode, headNode }) {
             <meshStandardMaterial color="#1D4ED8" roughness={0.4} />
           </mesh>
 
-          {/* 🏷️ Doctor's Official Hospital ID Badge */}
+          {/* 🏷️ Doctor's Official Hospital ID Badge (SANJEEVNI AI) */}
           <group position={[0, 0, 0.002]}>
             {/* Silver badge clip */}
-            <mesh position={[0, 0.036, 0.002]}>
+            <mesh position={[0, 0.038, 0.002]}>
               <boxGeometry args={[0.012, 0.008, 0.004]} />
               <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
             </mesh>
-            {/* White laminate card body */}
+            {/* White laminate card body with crisp SANJEEVNI AI branding */}
             <mesh position={[0, 0, 0]}>
               <boxGeometry args={[0.046, 0.066, 0.002]} />
-              <meshStandardMaterial color="#FFFFFF" roughness={0.35} />
-            </mesh>
-            {/* Blue header banner (SANJEEVNI AI) */}
-            <mesh position={[0, 0.024, 0.0015]}>
-              <boxGeometry args={[0.046, 0.015, 0.001]} />
-              <meshStandardMaterial color="#0EA5E9" roughness={0.3} />
-            </mesh>
-            {/* Medical Red Cross symbol */}
-            <mesh position={[0, 0.005, 0.002]}>
-              <boxGeometry args={[0.014, 0.004, 0.001]} />
-              <meshStandardMaterial color="#EF4444" roughness={0.3} />
-            </mesh>
-            <mesh position={[0, 0.005, 0.002]}>
-              <boxGeometry args={[0.004, 0.014, 0.001]} />
-              <meshStandardMaterial color="#EF4444" roughness={0.3} />
-            </mesh>
-            {/* Doctor credentials lines */}
-            <mesh position={[0, -0.014, 0.002]}>
-              <boxGeometry args={[0.032, 0.003, 0.001]} />
-              <meshStandardMaterial color="#0F172A" roughness={0.5} />
-            </mesh>
-            <mesh position={[0, -0.021, 0.002]}>
-              <boxGeometry args={[0.026, 0.003, 0.001]} />
-              <meshStandardMaterial color="#64748B" roughness={0.5} />
+              <meshStandardMaterial map={badgeTexture} roughness={0.3} />
             </mesh>
           </group>
         </group>
@@ -462,12 +518,12 @@ export function Avatar(props) {
     });
   }, [animationNames]);
 
-  // ── 🩺 Doctor Medical Wardrobe Transformation ───────────────────────────
+  // ── 🩺 Doctor Medical Wardrobe & Realistic PBR Appearance Transformation ──────────
   useEffect(() => {
     if (materials?.Wolf3D_Outfit_Top) {
       // Crisp Medical Doctor White Lab Coat
       materials.Wolf3D_Outfit_Top.color = new THREE.Color("#FFFFFF");
-      materials.Wolf3D_Outfit_Top.roughness = 0.85;
+      materials.Wolf3D_Outfit_Top.roughness = 0.82;
       materials.Wolf3D_Outfit_Top.metalness = 0.02;
       if (materials.Wolf3D_Outfit_Top.map) {
         materials.Wolf3D_Outfit_Top.map = null;
@@ -476,10 +532,10 @@ export function Avatar(props) {
     }
 
     if (materials?.Wolf3D_Outfit_Bottom) {
-      // Professional Hospital Navy/Slate Scrub Pants
-      materials.Wolf3D_Outfit_Bottom.color = new THREE.Color("#1E293B");
-      materials.Wolf3D_Outfit_Bottom.roughness = 0.8;
-      materials.Wolf3D_Outfit_Bottom.metalness = 0.05;
+      // Elegant Teal Medical Scrub Pants
+      materials.Wolf3D_Outfit_Bottom.color = new THREE.Color("#0F766E");
+      materials.Wolf3D_Outfit_Bottom.roughness = 0.78;
+      materials.Wolf3D_Outfit_Bottom.metalness = 0.02;
       if (materials.Wolf3D_Outfit_Bottom.map) {
         materials.Wolf3D_Outfit_Bottom.map = null;
       }
@@ -494,14 +550,38 @@ export function Avatar(props) {
     }
 
     if (materials?.Wolf3D_Hair) {
-      // Professional Clinical Deep Espresso Brunette Hair
-      materials.Wolf3D_Hair.color = new THREE.Color("#181412");
-      materials.Wolf3D_Hair.roughness = 0.55;
-      materials.Wolf3D_Hair.metalness = 0.05;
+      // Naturally styled black / dark espresso hair
+      materials.Wolf3D_Hair.color = new THREE.Color("#121110");
+      materials.Wolf3D_Hair.roughness = 0.52;
+      materials.Wolf3D_Hair.metalness = 0.04;
       if (materials.Wolf3D_Hair.map) {
         materials.Wolf3D_Hair.map = null;
       }
       materials.Wolf3D_Hair.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Skin) {
+      // Natural medium Indian skin tone with subtle warm undertones (non-plastic)
+      materials.Wolf3D_Skin.color = new THREE.Color("#D89F75");
+      materials.Wolf3D_Skin.roughness = 0.62;
+      materials.Wolf3D_Skin.metalness = 0.0;
+      materials.Wolf3D_Skin.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Body) {
+      // Matching natural medium Indian skin tone for hands and exposed skin
+      materials.Wolf3D_Body.color = new THREE.Color("#D89F75");
+      materials.Wolf3D_Body.roughness = 0.62;
+      materials.Wolf3D_Body.metalness = 0.0;
+      materials.Wolf3D_Body.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Eye) {
+      // Expressive dark brown eyes with clear reflective cornea
+      materials.Wolf3D_Eye.color = new THREE.Color("#3D2214");
+      materials.Wolf3D_Eye.roughness = 0.12;
+      materials.Wolf3D_Eye.metalness = 0.06;
+      materials.Wolf3D_Eye.needsUpdate = true;
     }
   }, [materials]);
 
