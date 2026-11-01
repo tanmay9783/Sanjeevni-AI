@@ -32,3 +32,4 @@ RUN mkdir -p audios
 
 # Start the app using shell form so $PORT is correctly interpreted
 CMD node index.js
+
