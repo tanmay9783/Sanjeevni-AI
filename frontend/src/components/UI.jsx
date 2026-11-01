@@ -8,13 +8,18 @@ const backendUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "http
 
 export const UI = ({ hidden }) => {
   const input = useRef();
-  const { chat, resetSession, loading, message, messages, playCustomMessage, pythonPlaying, isAvatarSpeaking } = useChat();
+  const { chat, resetSession, loading, message, messages, playCustomMessage, pythonPlaying, isAvatarSpeaking, cameraZoomed, setCameraZoomed } = useChat();
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState("");
   const [autoVoiceLoop, setAutoVoiceLoop] = useState(false);
 
-  const [showModal, setShowModal] = useState(true);
+  const [showModal, setShowModal] = useState(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("avatarPreview")) {
+      return false;
+    }
+    return true;
+  });
   const [showBodyMap, setShowBodyMap] = useState(false);
   const [showDoctorDashboard, setShowDoctorDashboard] = useState(false);
   const [formData, setFormData] = useState({
@@ -910,8 +915,16 @@ export const UI = ({ hidden }) => {
 
   return (
     <>
-      {/* Top Floating Buttons: Doctor Portal & Body Map */}
+      {/* Top Floating Buttons: Camera View Toggle & Doctor Portal */}
       <div className="fixed top-6 right-6 z-40 pointer-events-auto flex items-center gap-3">
+        <button
+          onClick={() => setCameraZoomed(!cameraZoomed)}
+          className="px-3.5 py-2.5 rounded-2xl bg-slate-900/80 backdrop-blur-md hover:bg-slate-800 text-slate-200 font-bold text-xs uppercase tracking-wider border border-slate-700/50 shadow-xl flex items-center gap-2 transition-all hover:scale-105"
+          title={cameraZoomed ? "Switch to Full Body View" : "Switch to Conversation Focus"}
+        >
+          <span>{cameraZoomed ? "🧍 Full View" : "🔍 Focus View"}</span>
+        </button>
+
         <button
           onClick={() => setShowDoctorDashboard(true)}
           className="px-4 py-2.5 rounded-2xl bg-slate-900/80 backdrop-blur-md hover:bg-slate-800 text-sky-400 font-bold text-xs uppercase tracking-wider border border-sky-500/30 shadow-xl flex items-center gap-2 transition-all hover:scale-105"

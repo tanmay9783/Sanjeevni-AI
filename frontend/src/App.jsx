@@ -20,7 +20,8 @@ function App() {
       <UI />
       <Canvas
         shadows
-        camera={{ position: [0, 2, 5], fov: 30 }}
+        gl={{ preserveDrawingBuffer: true, antialias: true }}
+        camera={{ position: [0, 1.25, 2.75], fov: 32 }}
         style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }}
       >
         <Suspense fallback={null}>
