@@ -8,7 +8,7 @@ const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:3125";
 
 export const UI = ({ hidden }) => {
   const input = useRef();
-  const { chat, loading, message, messages, playCustomMessage, pythonPlaying, isAvatarSpeaking } = useChat();
+  const { chat, resetSession, loading, message, messages, playCustomMessage, pythonPlaying, isAvatarSpeaking } = useChat();
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState("");
@@ -45,7 +45,10 @@ export const UI = ({ hidden }) => {
     setIsSearchingAbha(true);
     setAbhaStatus(null);
     try {
-      const res = await fetch(`${backendUrl}/api/patient-lookup?query=${encodeURIComponent(abhaSearch.trim())}`);
+      const sessId = sessionStorage.getItem("sanjeevni_session_id") || "default-kiosk";
+      const res = await fetch(`${backendUrl}/api/patient-lookup?query=${encodeURIComponent(abhaSearch.trim())}`, {
+        headers: { "x-session-id": sessId }
+      });
       const data = await res.json();
       if (data.found && data.patient) {
         const pt = data.patient;
@@ -139,8 +142,10 @@ export const UI = ({ hidden }) => {
     fd.append("document", file);
 
     try {
+      const sessId = sessionStorage.getItem("sanjeevni_session_id") || "default-kiosk";
       const response = await fetch(`${backendUrl}/upload-document`, {
         method: "POST",
+        headers: { "x-session-id": sessId },
         body: fd,
       });
       if (!response.ok) throw new Error("Upload failed");
@@ -194,16 +199,21 @@ export const UI = ({ hidden }) => {
 
   const handleSendToDoctor = async () => {
     setIsSendingToDoctor(true);
+    const sessId = sessionStorage.getItem("sanjeevni_session_id") || "default-kiosk";
     try {
       const response = await fetch(`${backendUrl}/send-to-doctor`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-session-id": sessId
+        },
         body: JSON.stringify({
           name: formData.name,
           age: formData.age,
           mobile: formData.mobile,
           id: formData.id || Math.floor(1000 + Math.random() * 9000),
           system: formData.system,
+          sessionId: sessId,
         }),
       });
 
@@ -218,7 +228,10 @@ export const UI = ({ hidden }) => {
       console.error("Error sending to doctor:", err);
       // Fallback: try generating summary directly
       try {
-        const sumRes = await fetch(`${backendUrl}/generate-summary`, { method: "POST" });
+        const sumRes = await fetch(`${backendUrl}/generate-summary`, { 
+          method: "POST",
+          headers: { "x-session-id": sessId }
+        });
         if (sumRes.ok) {
           const sumData = await sumRes.json();
           setSummaryData(sumData.summary);
@@ -233,6 +246,8 @@ export const UI = ({ hidden }) => {
   };
 
   const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const lastSentTime = useRef(0);
   const isRecognizingRef = useRef(false);
   const networkErrorCountRef = useRef(0);
@@ -254,6 +269,83 @@ export const UI = ({ hidden }) => {
   useEffect(() => { isAvatarSpeakingRef.current = isAvatarSpeaking; }, [isAvatarSpeaking]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
   useEffect(() => { pythonPlayingRef.current = pythonPlaying; }, [pythonPlaying]);
+
+  // ── Universal MediaRecorder + Groq Whisper STT Fallback ──────────────────
+  const startMediaRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        if (audioBlob.size < 500) {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+          return;
+        }
+
+        setRecordingStatus("🔄 Transcribing with Groq Whisper AI...");
+        try {
+          const fd = new FormData();
+          fd.append("audio", audioBlob, "speech.webm");
+          fd.append("language", formData.language === "mixed" ? "hi" : (formData.language?.slice(0, 2) || "hi"));
+          const sessId = sessionStorage.getItem("sanjeevni_session_id") || "default-kiosk";
+
+          const res = await fetch(`${backendUrl}/api/transcribe`, {
+            method: "POST",
+            headers: { "x-session-id": sessId },
+            body: fd,
+          });
+
+          if (!res.ok) throw new Error("Whisper transcription failed");
+          const data = await res.json();
+          if (data && data.text && data.text.trim()) {
+            const transcript = data.text.trim();
+            if (input.current) input.current.value = transcript;
+            console.log("🚀 Transcribed via Groq Whisper:", transcript);
+            chat(transcript);
+            setRecordingStatus("✓ Sent");
+            setTimeout(() => setRecordingStatus(""), 2000);
+          } else {
+            setRecordingStatus("");
+          }
+        } catch (err) {
+          console.error("Groq Whisper transcription error:", err);
+          setRecordingStatus("⚠️ Transcription error. Please try again.");
+          setTimeout(() => setRecordingStatus(""), 3000);
+        } finally {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+        }
+      };
+
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+      isRecordingRef.current = true;
+      setRecordingStatus("🎙 Recording (Whisper AI)...");
+    } catch (err) {
+      console.error("Microphone capture failed:", err);
+      setIsRecording(false);
+      isRecordingRef.current = false;
+      setRecordingStatus("⚠️ Mic access denied");
+      setTimeout(() => setRecordingStatus(""), 3000);
+    }
+  };
+
+  const stopMediaRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  };
 
   // ── Poll pythonMode flag from Node ────────────────────────────────────────
   useEffect(() => {
@@ -294,12 +386,18 @@ export const UI = ({ hidden }) => {
 
   // ── Record toggle ─────────────────────────────────────────────────────────
   const handleRecord = (forceState, fromGradio = false) => {
-    if (!recognitionRef.current) {
-      alert("Speech Recognition not supported. Please use Chrome.");
+    const nextState = typeof forceState === "boolean" ? forceState : !isRecordingRef.current;
+    const hasWebSpeech = typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+    // If browser lacks Web Speech API or recognition initialization failed, use MediaRecorder + Groq Whisper
+    if (!hasWebSpeech || !recognitionRef.current) {
+      if (nextState) {
+        startMediaRecording();
+      } else {
+        stopMediaRecording();
+      }
       return;
     }
-
-    const nextState = typeof forceState === "boolean" ? forceState : !isRecordingRef.current;
 
     // If triggered by Gradio postMessage
     if (fromGradio) {
@@ -315,6 +413,7 @@ export const UI = ({ hidden }) => {
     if (!nextState) {
       setIsRecording(false);
       isRecordingRef.current = false;
+      stopMediaRecording();
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       try {
@@ -338,7 +437,8 @@ export const UI = ({ hidden }) => {
           recognitionRef.current.start();
           isRecognizingRef.current = true;
         } catch (e) {
-          console.warn("Recognition start info:", e);
+          console.warn("Recognition start fallback to MediaRecorder:", e);
+          startMediaRecording();
         }
       }, 100);
     }
@@ -787,7 +887,8 @@ export const UI = ({ hidden }) => {
             </button>
 
             <button
-              onClick={() => {
+              onClick={async () => {
+                await resetSession();
                 setSentToDoctor(false);
                 setShowModal(true);
                 setSummaryData(null);

@@ -2,6 +2,15 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:3125";
 
+const getOrCreateSessionId = () => {
+  let sid = sessionStorage.getItem("sanjeevni_session_id");
+  if (!sid) {
+    sid = "kiosk_" + Math.random().toString(36).slice(2) + "_" + Date.now();
+    sessionStorage.setItem("sanjeevni_session_id", sid);
+  }
+  return sid;
+};
+
 const ChatContext = createContext();
 
 export const ChatProvider = ({ children }) => {
@@ -14,6 +23,21 @@ export const ChatProvider = ({ children }) => {
   const pythonPlayingRef = useRef(false);
   const isSendingRef     = useRef(false);
   const lastPayloadTsRef = useRef(0);
+
+  const resetSession = async () => {
+    try {
+      const oldSid = getOrCreateSessionId();
+      await fetch(`${backendUrl}/api/session/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-session-id": oldSid }
+      });
+    } catch (_) {}
+    const newSid = "kiosk_" + Math.random().toString(36).slice(2) + "_" + Date.now();
+    sessionStorage.setItem("sanjeevni_session_id", newSid);
+    setMessages([]);
+    setMessage(null);
+    return newSid;
+  };
 
   // ── chat() — blocked entirely while Python is active ─────────────────────
   const chat = async (messageText, patientData = null) => {
@@ -30,8 +54,11 @@ export const ChatProvider = ({ children }) => {
     try {
       const response = await fetch(`${backendUrl}/chat`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ message: messageText, patientData }),
+        headers: {
+          "Content-Type": "application/json",
+          "x-session-id": getOrCreateSessionId(),
+        },
+        body:    JSON.stringify({ message: messageText, patientData, sessionId: getOrCreateSessionId() }),
       });
 
       // 423 = pythonMode active on Node side (double guard)
@@ -138,6 +165,7 @@ export const ChatProvider = ({ children }) => {
     <ChatContext.Provider
       value={{
         chat,
+        resetSession,
         message,
         messages,
         onMessagePlayed: onMessagePlayedWrapped,
