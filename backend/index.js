@@ -1061,7 +1061,7 @@ const startServer = async () => {
     }
   }
 
-  app.listen(port, () => {
+  app.listen(port, "0.0.0.0", () => {
     console.log(`Sanjeevni AI listening on port ${port}`);
     console.log(`Rhubarb path: ${RHUBARB_PATH}`);
     console.log(`FFmpeg path: ${FFMPEG_PATH}`);
