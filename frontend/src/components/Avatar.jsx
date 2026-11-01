@@ -129,131 +129,265 @@ const corresponding = {
 
 let setupMode = false;
 
-// ── 🩺 3D Clinical Doctor Accessories (Stethoscope & Hospital ID Badge) ────
-function DoctorAccessories({ spineNode }) {
-  const accessoryRef = useRef();
-  const tempVec = useMemo(() => new THREE.Vector3(), []);
-  const tempQuat = useMemo(() => new THREE.Quaternion(), []);
+// ── 🩺 3D Clinical Doctor Accessories (Stethoscope, Glasses, Tied Hair, ID Badge) ────
+function DoctorAccessories({ spineNode, headNode }) {
+  const spineRef = useRef();
+  const headRef = useRef();
 
-  // Anatomically shaped stethoscope tubing looping over shoulders and neck
+  const tempVecSpine = useMemo(() => new THREE.Vector3(), []);
+  const tempQuatSpine = useMemo(() => new THREE.Quaternion(), []);
+  const tempVecHead = useMemo(() => new THREE.Vector3(), []);
+  const tempQuatHead = useMemo(() => new THREE.Quaternion(), []);
+
+  // Anatomically shaped 3M Littmann style stethoscope tubing looping over shoulders and neck
   const stethoscopeCurve = useMemo(() => {
     return new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, 0.14, -0.05),
-      new THREE.Vector3(-0.065, 0.12, -0.02),
-      new THREE.Vector3(-0.08, 0.08, 0.05),
-      new THREE.Vector3(-0.065, -0.02, 0.09),
-      new THREE.Vector3(-0.04, -0.10, 0.105),
-      new THREE.Vector3(0, -0.13, 0.11),
-      new THREE.Vector3(0.04, -0.10, 0.105),
-      new THREE.Vector3(0.065, -0.02, 0.09),
-      new THREE.Vector3(0.08, 0.08, 0.05),
-      new THREE.Vector3(0.065, 0.12, -0.02),
-      new THREE.Vector3(0, 0.14, -0.05)
+      new THREE.Vector3(0, 0.125, -0.045),
+      new THREE.Vector3(-0.068, 0.105, 0.005),
+      new THREE.Vector3(-0.082, 0.05, 0.065),
+      new THREE.Vector3(-0.065, -0.04, 0.098),
+      new THREE.Vector3(-0.035, -0.11, 0.11),
+      new THREE.Vector3(0, -0.14, 0.115),
+      new THREE.Vector3(0.035, -0.11, 0.11),
+      new THREE.Vector3(0.065, -0.04, 0.098),
+      new THREE.Vector3(0.082, 0.05, 0.065),
+      new THREE.Vector3(0.068, 0.105, 0.005),
+      new THREE.Vector3(0, 0.125, -0.045)
     ]);
   }, []);
 
   const extensionCurve = useMemo(() => {
     return new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0, -0.13, 0.11),
-      new THREE.Vector3(0.015, -0.16, 0.115),
-      new THREE.Vector3(0.02, -0.19, 0.118)
+      new THREE.Vector3(0, -0.14, 0.115),
+      new THREE.Vector3(0.015, -0.175, 0.12),
+      new THREE.Vector3(0.025, -0.21, 0.122)
     ]);
   }, []);
 
-  const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.005, 12, false), [stethoscopeCurve]);
-  const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 24, 0.004, 10, false), [extensionCurve]);
+  const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.0055, 12, false), [stethoscopeCurve]);
+  const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 24, 0.0045, 10, false), [extensionCurve]);
 
+  // Synchronize accessories to skeleton bones on each render frame
   useFrame(() => {
-    if (accessoryRef.current && spineNode) {
-      spineNode.getWorldPosition(tempVec);
-      spineNode.getWorldQuaternion(tempQuat);
-      accessoryRef.current.position.copy(tempVec);
-      accessoryRef.current.quaternion.copy(tempQuat);
+    if (spineRef.current && spineNode) {
+      spineNode.getWorldPosition(tempVecSpine);
+      spineNode.getWorldQuaternion(tempQuatSpine);
+      spineRef.current.position.copy(tempVecSpine);
+      spineRef.current.quaternion.copy(tempQuatSpine);
+    }
+    if (headRef.current && headNode) {
+      headNode.getWorldPosition(tempVecHead);
+      headNode.getWorldQuaternion(tempQuatHead);
+      headRef.current.position.copy(tempVecHead);
+      headRef.current.quaternion.copy(tempQuatHead);
     }
   });
 
   return (
-    <group ref={accessoryRef}>
-      {/* 🩺 Stethoscope Flexible Medical Tubing */}
-      <mesh geometry={tubeGeometry}>
-        <meshStandardMaterial color="#0284C7" roughness={0.35} metalness={0.15} />
-      </mesh>
+    <>
+      {/* ── 🩺 Torso & Coat Accessories (Stethoscope, Inner Scrub, Pocket Tools, Badge) ── */}
+      <group ref={spineRef}>
+        {/* 🩺 Stethoscope Flexible Medical Tubing (Navy / Sapphire Rubber) */}
+        <mesh geometry={tubeGeometry}>
+          <meshStandardMaterial color="#0369A1" roughness={0.35} metalness={0.15} />
+        </mesh>
 
-      {/* Chestpiece extension tube */}
-      <mesh geometry={extGeometry}>
-        <meshStandardMaterial color="#0284C7" roughness={0.35} metalness={0.15} />
-      </mesh>
+        {/* Chestpiece extension tube */}
+        <mesh geometry={extGeometry}>
+          <meshStandardMaterial color="#0369A1" roughness={0.35} metalness={0.15} />
+        </mesh>
 
-      {/* 🩺 Stethoscope Metallic Diaphragm / Chestpiece */}
-      <group position={[0.02, -0.19, 0.118]} rotation={[Math.PI / 2, 0, 0]}>
-        {/* Outer Chrome Rim */}
-        <mesh>
-          <cylinderGeometry args={[0.018, 0.018, 0.008, 32]} />
+        {/* Binaural metal tension spring & yoke */}
+        <mesh position={[0, 0.125, -0.04]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.004, 0.004, 0.035, 16]} />
+          <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+        </mesh>
+
+        {/* 🩺 Stethoscope Dual-Sided Heavy Acoustic Chestpiece */}
+        <group position={[0.025, -0.21, 0.122]} rotation={[Math.PI / 2, 0, 0]}>
+          {/* Chrome outer casing */}
+          <mesh>
+            <cylinderGeometry args={[0.02, 0.02, 0.009, 32]} />
+            <meshStandardMaterial color="#E2E8F0" metalness={0.98} roughness={0.1} />
+          </mesh>
+          {/* Dark surgical non-chill rim */}
+          <mesh position={[0, 0.0045, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.019, 0.002, 8, 32]} />
+            <meshStandardMaterial color="#0F172A" roughness={0.8} />
+          </mesh>
+          {/* Inner tunable diaphragm membrane */}
+          <mesh position={[0, 0.005, 0]}>
+            <cylinderGeometry args={[0.017, 0.017, 0.0015, 32]} />
+            <meshStandardMaterial color="#38BDF8" metalness={0.3} roughness={0.35} />
+          </mesh>
+          {/* Pediatric bell on reverse side */}
+          <mesh position={[0, -0.0055, 0]}>
+            <cylinderGeometry args={[0.013, 0.013, 0.003, 24]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
+        </group>
+
+        {/* 🩺 Chrome Binaural Tubes rising towards ears */}
+        <mesh position={[-0.048, 0.17, -0.018]} rotation={[0.2, 0, -0.14]}>
+          <cylinderGeometry args={[0.0035, 0.0035, 0.085, 16]} />
           <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
         </mesh>
-        {/* Inner Acoustic Diaphragm Membrane */}
-        <mesh position={[0, 0.004, 0]}>
-          <cylinderGeometry args={[0.015, 0.015, 0.002, 32]} />
-          <meshStandardMaterial color="#0284C7" metalness={0.4} roughness={0.3} />
+        <mesh position={[0.048, 0.17, -0.018]} rotation={[0.2, 0, 0.14]}>
+          <cylinderGeometry args={[0.0035, 0.0035, 0.085, 16]} />
+          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
         </mesh>
+        {/* Soft Silicone Ear Tips */}
+        <mesh position={[-0.058, 0.21, -0.008]}>
+          <sphereGeometry args={[0.005, 12, 12]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.8} />
+        </mesh>
+        <mesh position={[0.058, 0.21, -0.008]}>
+          <sphereGeometry args={[0.005, 12, 12]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.8} />
+        </mesh>
+
+        {/* 🥼 Inner Surgical V-Neck Scrub (under white lab coat collar) */}
+        <group position={[0, 0.02, 0.088]} rotation={[0.12, 0, 0]}>
+          {/* Left V-neck collar band */}
+          <mesh position={[-0.03, 0, 0]} rotation={[0, 0, 0.45]}>
+            <boxGeometry args={[0.012, 0.085, 0.004]} />
+            <meshStandardMaterial color="#0D9488" roughness={0.7} />
+          </mesh>
+          {/* Right V-neck collar band */}
+          <mesh position={[0.03, 0, 0]} rotation={[0, 0, -0.45]}>
+            <boxGeometry args={[0.012, 0.085, 0.004]} />
+            <meshStandardMaterial color="#0D9488" roughness={0.7} />
+          </mesh>
+          {/* Inner chest scrub panel */}
+          <mesh position={[0, -0.018, -0.002]}>
+            <boxGeometry args={[0.065, 0.075, 0.002]} />
+            <meshStandardMaterial color="#0D9488" roughness={0.75} />
+          </mesh>
+        </group>
+
+        {/* 🥼 Coat Chest Pocket with Clinical Instruments & ID Badge */}
+        <group position={[-0.086, -0.02, 0.108]} rotation={[0, 0.18, -0.04]}>
+          {/* Pocket hem line */}
+          <mesh position={[0, 0.032, 0.001]}>
+            <boxGeometry args={[0.052, 0.005, 0.003]} />
+            <meshStandardMaterial color="#E2E8F0" roughness={0.9} />
+          </mesh>
+
+          {/* Clinical Diagnostic Penlight */}
+          <mesh position={[0.016, 0.038, 0.005]} rotation={[0.08, 0, -0.05]}>
+            <cylinderGeometry args={[0.0026, 0.0026, 0.042, 12]} />
+            <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
+          </mesh>
+
+          {/* Medical Charting Pen (Blue Cap Clip) */}
+          <mesh position={[0.008, 0.04, 0.005]} rotation={[0.08, 0, 0.04]}>
+            <cylinderGeometry args={[0.0024, 0.0024, 0.045, 12]} />
+            <meshStandardMaterial color="#1D4ED8" roughness={0.4} />
+          </mesh>
+
+          {/* 🏷️ Doctor's Official Hospital ID Badge */}
+          <group position={[0, 0, 0.002]}>
+            {/* Silver badge clip */}
+            <mesh position={[0, 0.036, 0.002]}>
+              <boxGeometry args={[0.012, 0.008, 0.004]} />
+              <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+            </mesh>
+            {/* White laminate card body */}
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[0.046, 0.066, 0.002]} />
+              <meshStandardMaterial color="#FFFFFF" roughness={0.35} />
+            </mesh>
+            {/* Blue header banner (SANJEEVNI AI) */}
+            <mesh position={[0, 0.024, 0.0015]}>
+              <boxGeometry args={[0.046, 0.015, 0.001]} />
+              <meshStandardMaterial color="#0EA5E9" roughness={0.3} />
+            </mesh>
+            {/* Medical Red Cross symbol */}
+            <mesh position={[0, 0.005, 0.002]}>
+              <boxGeometry args={[0.014, 0.004, 0.001]} />
+              <meshStandardMaterial color="#EF4444" roughness={0.3} />
+            </mesh>
+            <mesh position={[0, 0.005, 0.002]}>
+              <boxGeometry args={[0.004, 0.014, 0.001]} />
+              <meshStandardMaterial color="#EF4444" roughness={0.3} />
+            </mesh>
+            {/* Doctor credentials lines */}
+            <mesh position={[0, -0.014, 0.002]}>
+              <boxGeometry args={[0.032, 0.003, 0.001]} />
+              <meshStandardMaterial color="#0F172A" roughness={0.5} />
+            </mesh>
+            <mesh position={[0, -0.021, 0.002]}>
+              <boxGeometry args={[0.026, 0.003, 0.001]} />
+              <meshStandardMaterial color="#64748B" roughness={0.5} />
+            </mesh>
+          </group>
+        </group>
       </group>
 
-      {/* 🩺 Binaural Chrome Ear Tubes */}
-      <mesh position={[-0.05, 0.17, -0.02]} rotation={[0.2, 0, -0.15]}>
-        <cylinderGeometry args={[0.003, 0.003, 0.08, 16]} />
-        <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
-      </mesh>
-      <mesh position={[0.05, 0.17, -0.02]} rotation={[0.2, 0, 0.15]}>
-        <cylinderGeometry args={[0.003, 0.003, 0.08, 16]} />
-        <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
-      </mesh>
-      {/* Soft Silicone Ear Tips */}
-      <mesh position={[-0.06, 0.21, -0.01]}>
-        <sphereGeometry args={[0.005, 12, 12]} />
-        <meshStandardMaterial color="#0F172A" roughness={0.8} />
-      </mesh>
-      <mesh position={[0.06, 0.21, -0.01]}>
-        <sphereGeometry args={[0.005, 12, 12]} />
-        <meshStandardMaterial color="#0F172A" roughness={0.8} />
-      </mesh>
+      {/* ── 👓 Head Accessories (Doctor Reading Glasses & Tied Medical Hair) ── */}
+      <group ref={headRef}>
+        {/* 👓 Professional Doctor Titanium Reading Glasses */}
+        <group position={[0, 0.086, 0.072]}>
+          {/* Nose Bridge */}
+          <mesh rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.0014, 0.0014, 0.018, 8]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
 
-      {/* 🏷️ Doctor's Official Hospital ID Badge on Coat Lapel */}
-      <group position={[-0.085, 0.02, 0.105]} rotation={[0, 0.2, -0.05]}>
-        {/* Silver badge clip */}
-        <mesh position={[0, 0.038, 0.002]}>
-          <boxGeometry args={[0.012, 0.008, 0.004]} />
-          <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
-        </mesh>
-        {/* White laminate card body */}
-        <mesh position={[0, 0, 0]}>
-          <boxGeometry args={[0.046, 0.068, 0.002]} />
-          <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
-        </mesh>
-        {/* Blue header banner (SANJEEVNI AI) */}
-        <mesh position={[0, 0.025, 0.0015]}>
-          <boxGeometry args={[0.046, 0.016, 0.001]} />
-          <meshStandardMaterial color="#0EA5E9" roughness={0.3} />
-        </mesh>
-        {/* Medical Red Cross symbol */}
-        <mesh position={[0, 0.005, 0.002]}>
-          <boxGeometry args={[0.014, 0.004, 0.001]} />
-          <meshStandardMaterial color="#EF4444" roughness={0.3} />
-        </mesh>
-        <mesh position={[0, 0.005, 0.002]}>
-          <boxGeometry args={[0.004, 0.014, 0.001]} />
-          <meshStandardMaterial color="#EF4444" roughness={0.3} />
-        </mesh>
-        {/* Doctor credentials lines */}
-        <mesh position={[0, -0.014, 0.002]}>
-          <boxGeometry args={[0.032, 0.003, 0.001]} />
-          <meshStandardMaterial color="#0F172A" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, -0.022, 0.002]}>
-          <boxGeometry args={[0.026, 0.003, 0.001]} />
-          <meshStandardMaterial color="#64748B" roughness={0.5} />
-        </mesh>
+          {/* Left Rim */}
+          <mesh position={[0.034, 0, 0]}>
+            <torusGeometry args={[0.016, 0.0015, 8, 32]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
+          {/* Left Prescription Lens */}
+          <mesh position={[0.034, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.015, 0.015, 0.001, 24]} />
+            <meshPhysicalMaterial color="#E0F2FE" transparent opacity={0.3} roughness={0.1} transmission={0.7} />
+          </mesh>
+
+          {/* Right Rim */}
+          <mesh position={[-0.034, 0, 0]}>
+            <torusGeometry args={[0.016, 0.0015, 8, 32]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
+          {/* Right Prescription Lens */}
+          <mesh position={[-0.034, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.015, 0.015, 0.001, 24]} />
+            <meshPhysicalMaterial color="#E0F2FE" transparent opacity={0.3} roughness={0.1} transmission={0.7} />
+          </mesh>
+
+          {/* Left Temple Arm extending to ear */}
+          <mesh position={[0.05, 0.002, -0.04]} rotation={[Math.PI / 2, 0, 0.15]}>
+            <cylinderGeometry args={[0.0012, 0.0012, 0.08, 8]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
+          {/* Right Temple Arm extending to ear */}
+          <mesh position={[-0.05, 0.002, -0.04]} rotation={[Math.PI / 2, 0, -0.15]}>
+            <cylinderGeometry args={[0.0012, 0.0012, 0.08, 8]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.95} roughness={0.15} />
+          </mesh>
+        </group>
+
+        {/* 🎀 Neat Tied Medical Hair Scrunchie & Polished Clinical Bun */}
+        <group position={[0, 0.055, -0.098]}>
+          {/* Medical Teal Surgical Hair Scrunchie / Tie */}
+          <mesh rotation={[0.2, 0, 0]}>
+            <torusGeometry args={[0.024, 0.007, 12, 28]} />
+            <meshStandardMaterial color="#0D9488" roughness={0.8} />
+          </mesh>
+          {/* Tied Hair Bun (Deep Natural Espresso Brunette) */}
+          <mesh position={[0, -0.01, -0.015]}>
+            <sphereGeometry args={[0.034, 16, 16]} />
+            <meshStandardMaterial color="#181412" roughness={0.6} />
+          </mesh>
+          {/* Chrome hair clasp */}
+          <mesh position={[0, 0.01, 0.004]}>
+            <boxGeometry args={[0.024, 0.004, 0.004]} />
+            <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+          </mesh>
+        </group>
       </group>
-    </group>
+    </>
   );
 }
 
@@ -357,6 +491,17 @@ export function Avatar(props) {
       materials.Wolf3D_Outfit_Footwear.color = new THREE.Color("#0F172A");
       materials.Wolf3D_Outfit_Footwear.roughness = 0.4;
       materials.Wolf3D_Outfit_Footwear.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Hair) {
+      // Professional Clinical Deep Espresso Brunette Hair
+      materials.Wolf3D_Hair.color = new THREE.Color("#181412");
+      materials.Wolf3D_Hair.roughness = 0.55;
+      materials.Wolf3D_Hair.metalness = 0.05;
+      if (materials.Wolf3D_Hair.map) {
+        materials.Wolf3D_Hair.map = null;
+      }
+      materials.Wolf3D_Hair.needsUpdate = true;
     }
   }, [materials]);
 
@@ -675,8 +820,10 @@ export function Avatar(props) {
       <skinnedMesh name="Wolf3D_Head"  geometry={nodes.Wolf3D_Head.geometry}  material={materials.Wolf3D_Skin}  skeleton={nodes.Wolf3D_Head.skeleton}  morphTargetDictionary={nodes.Wolf3D_Head.morphTargetDictionary}  morphTargetInfluences={nodes.Wolf3D_Head.morphTargetInfluences} />
       <skinnedMesh name="Wolf3D_Teeth" geometry={nodes.Wolf3D_Teeth.geometry} material={materials.Wolf3D_Teeth} skeleton={nodes.Wolf3D_Teeth.skeleton} morphTargetDictionary={nodes.Wolf3D_Teeth.morphTargetDictionary} morphTargetInfluences={nodes.Wolf3D_Teeth.morphTargetInfluences} />
 
-      {/* 🩺 3D Doctor Stethoscope & Clinical Hospital ID Badge */}
-      {nodes.Spine2 && <DoctorAccessories spineNode={nodes.Spine2} />}
+      {/* 🩺 3D Doctor Stethoscope, Hospital Badge & Head Accessories */}
+      {nodes.Spine2 && nodes.Head && (
+        <DoctorAccessories spineNode={nodes.Spine2} headNode={nodes.Head} />
+      )}
     </group>
   );
 }
