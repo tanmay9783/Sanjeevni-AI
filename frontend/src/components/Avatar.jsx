@@ -129,6 +129,134 @@ const corresponding = {
 
 let setupMode = false;
 
+// ── 🩺 3D Clinical Doctor Accessories (Stethoscope & Hospital ID Badge) ────
+function DoctorAccessories({ spineNode }) {
+  const accessoryRef = useRef();
+  const tempVec = useMemo(() => new THREE.Vector3(), []);
+  const tempQuat = useMemo(() => new THREE.Quaternion(), []);
+
+  // Anatomically shaped stethoscope tubing looping over shoulders and neck
+  const stethoscopeCurve = useMemo(() => {
+    return new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.14, -0.05),
+      new THREE.Vector3(-0.065, 0.12, -0.02),
+      new THREE.Vector3(-0.08, 0.08, 0.05),
+      new THREE.Vector3(-0.065, -0.02, 0.09),
+      new THREE.Vector3(-0.04, -0.10, 0.105),
+      new THREE.Vector3(0, -0.13, 0.11),
+      new THREE.Vector3(0.04, -0.10, 0.105),
+      new THREE.Vector3(0.065, -0.02, 0.09),
+      new THREE.Vector3(0.08, 0.08, 0.05),
+      new THREE.Vector3(0.065, 0.12, -0.02),
+      new THREE.Vector3(0, 0.14, -0.05)
+    ]);
+  }, []);
+
+  const extensionCurve = useMemo(() => {
+    return new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -0.13, 0.11),
+      new THREE.Vector3(0.015, -0.16, 0.115),
+      new THREE.Vector3(0.02, -0.19, 0.118)
+    ]);
+  }, []);
+
+  const tubeGeometry = useMemo(() => new THREE.TubeGeometry(stethoscopeCurve, 64, 0.005, 12, false), [stethoscopeCurve]);
+  const extGeometry = useMemo(() => new THREE.TubeGeometry(extensionCurve, 24, 0.004, 10, false), [extensionCurve]);
+
+  useFrame(() => {
+    if (accessoryRef.current && spineNode) {
+      spineNode.getWorldPosition(tempVec);
+      spineNode.getWorldQuaternion(tempQuat);
+      accessoryRef.current.position.copy(tempVec);
+      accessoryRef.current.quaternion.copy(tempQuat);
+    }
+  });
+
+  return (
+    <group ref={accessoryRef}>
+      {/* 🩺 Stethoscope Flexible Medical Tubing */}
+      <mesh geometry={tubeGeometry}>
+        <meshStandardMaterial color="#0284C7" roughness={0.35} metalness={0.15} />
+      </mesh>
+
+      {/* Chestpiece extension tube */}
+      <mesh geometry={extGeometry}>
+        <meshStandardMaterial color="#0284C7" roughness={0.35} metalness={0.15} />
+      </mesh>
+
+      {/* 🩺 Stethoscope Metallic Diaphragm / Chestpiece */}
+      <group position={[0.02, -0.19, 0.118]} rotation={[Math.PI / 2, 0, 0]}>
+        {/* Outer Chrome Rim */}
+        <mesh>
+          <cylinderGeometry args={[0.018, 0.018, 0.008, 32]} />
+          <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
+        </mesh>
+        {/* Inner Acoustic Diaphragm Membrane */}
+        <mesh position={[0, 0.004, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, 0.002, 32]} />
+          <meshStandardMaterial color="#0284C7" metalness={0.4} roughness={0.3} />
+        </mesh>
+      </group>
+
+      {/* 🩺 Binaural Chrome Ear Tubes */}
+      <mesh position={[-0.05, 0.17, -0.02]} rotation={[0.2, 0, -0.15]}>
+        <cylinderGeometry args={[0.003, 0.003, 0.08, 16]} />
+        <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
+      </mesh>
+      <mesh position={[0.05, 0.17, -0.02]} rotation={[0.2, 0, 0.15]}>
+        <cylinderGeometry args={[0.003, 0.003, 0.08, 16]} />
+        <meshStandardMaterial color="#E2E8F0" metalness={0.95} roughness={0.15} />
+      </mesh>
+      {/* Soft Silicone Ear Tips */}
+      <mesh position={[-0.06, 0.21, -0.01]}>
+        <sphereGeometry args={[0.005, 12, 12]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.8} />
+      </mesh>
+      <mesh position={[0.06, 0.21, -0.01]}>
+        <sphereGeometry args={[0.005, 12, 12]} />
+        <meshStandardMaterial color="#0F172A" roughness={0.8} />
+      </mesh>
+
+      {/* 🏷️ Doctor's Official Hospital ID Badge on Coat Lapel */}
+      <group position={[-0.085, 0.02, 0.105]} rotation={[0, 0.2, -0.05]}>
+        {/* Silver badge clip */}
+        <mesh position={[0, 0.038, 0.002]}>
+          <boxGeometry args={[0.012, 0.008, 0.004]} />
+          <meshStandardMaterial color="#CBD5E1" metalness={0.9} roughness={0.2} />
+        </mesh>
+        {/* White laminate card body */}
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[0.046, 0.068, 0.002]} />
+          <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
+        </mesh>
+        {/* Blue header banner (SANJEEVNI AI) */}
+        <mesh position={[0, 0.025, 0.0015]}>
+          <boxGeometry args={[0.046, 0.016, 0.001]} />
+          <meshStandardMaterial color="#0EA5E9" roughness={0.3} />
+        </mesh>
+        {/* Medical Red Cross symbol */}
+        <mesh position={[0, 0.005, 0.002]}>
+          <boxGeometry args={[0.014, 0.004, 0.001]} />
+          <meshStandardMaterial color="#EF4444" roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.005, 0.002]}>
+          <boxGeometry args={[0.004, 0.014, 0.001]} />
+          <meshStandardMaterial color="#EF4444" roughness={0.3} />
+        </mesh>
+        {/* Doctor credentials lines */}
+        <mesh position={[0, -0.014, 0.002]}>
+          <boxGeometry args={[0.032, 0.003, 0.001]} />
+          <meshStandardMaterial color="#0F172A" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, -0.022, 0.002]}>
+          <boxGeometry args={[0.026, 0.003, 0.001]} />
+          <meshStandardMaterial color="#64748B" roughness={0.5} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 export function Avatar(props) {
   const { nodes, materials, scene } = useGLTF(
     "/models/64f1a714fe61576b46f27ca2.glb"
@@ -199,6 +327,38 @@ export function Avatar(props) {
       return animationNames[0];
     });
   }, [animationNames]);
+
+  // ── 🩺 Doctor Medical Wardrobe Transformation ───────────────────────────
+  useEffect(() => {
+    if (materials?.Wolf3D_Outfit_Top) {
+      // Crisp Medical Doctor White Lab Coat
+      materials.Wolf3D_Outfit_Top.color = new THREE.Color("#FFFFFF");
+      materials.Wolf3D_Outfit_Top.roughness = 0.85;
+      materials.Wolf3D_Outfit_Top.metalness = 0.02;
+      if (materials.Wolf3D_Outfit_Top.map) {
+        materials.Wolf3D_Outfit_Top.map = null;
+      }
+      materials.Wolf3D_Outfit_Top.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Outfit_Bottom) {
+      // Professional Hospital Navy/Slate Scrub Pants
+      materials.Wolf3D_Outfit_Bottom.color = new THREE.Color("#1E293B");
+      materials.Wolf3D_Outfit_Bottom.roughness = 0.8;
+      materials.Wolf3D_Outfit_Bottom.metalness = 0.05;
+      if (materials.Wolf3D_Outfit_Bottom.map) {
+        materials.Wolf3D_Outfit_Bottom.map = null;
+      }
+      materials.Wolf3D_Outfit_Bottom.needsUpdate = true;
+    }
+
+    if (materials?.Wolf3D_Outfit_Footwear) {
+      // Polished Clinical Medical Footwear
+      materials.Wolf3D_Outfit_Footwear.color = new THREE.Color("#0F172A");
+      materials.Wolf3D_Outfit_Footwear.roughness = 0.4;
+      materials.Wolf3D_Outfit_Footwear.needsUpdate = true;
+    }
+  }, [materials]);
 
   // ── Unlock AudioContext for autoplay inside iframe ─────────────────────────
   const unlockAndPlay = (audio) => {
@@ -514,6 +674,9 @@ export function Avatar(props) {
       <skinnedMesh name="EyeRight" geometry={nodes.EyeRight.geometry} material={materials.Wolf3D_Eye}   skeleton={nodes.EyeRight.skeleton} morphTargetDictionary={nodes.EyeRight.morphTargetDictionary} morphTargetInfluences={nodes.EyeRight.morphTargetInfluences} />
       <skinnedMesh name="Wolf3D_Head"  geometry={nodes.Wolf3D_Head.geometry}  material={materials.Wolf3D_Skin}  skeleton={nodes.Wolf3D_Head.skeleton}  morphTargetDictionary={nodes.Wolf3D_Head.morphTargetDictionary}  morphTargetInfluences={nodes.Wolf3D_Head.morphTargetInfluences} />
       <skinnedMesh name="Wolf3D_Teeth" geometry={nodes.Wolf3D_Teeth.geometry} material={materials.Wolf3D_Teeth} skeleton={nodes.Wolf3D_Teeth.skeleton} morphTargetDictionary={nodes.Wolf3D_Teeth.morphTargetDictionary} morphTargetInfluences={nodes.Wolf3D_Teeth.morphTargetInfluences} />
+
+      {/* 🩺 3D Doctor Stethoscope & Clinical Hospital ID Badge */}
+      {nodes.Spine2 && <DoctorAccessories spineNode={nodes.Spine2} />}
     </group>
   );
 }
