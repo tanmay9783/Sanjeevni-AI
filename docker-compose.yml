@@ -1,0 +1,113 @@
+version: "3.8"
+
+services:
+  # =========================================================================
+  # 1. MongoDB Database (Clinical Data Storage for Swasya AI & Patient Records)
+  # =========================================================================
+  mongo:
+    image: mongo:6.0
+    container_name: sanjeevni_swasya_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - clinical_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================================
+  # 2. Swasya AI Medical Officer Backend (FastAPI, Groq LLaMA, WebSockets)
+  # =========================================================================
+  swasya-backend:
+    build:
+      context: ../swasya_ai
+      dockerfile: backend/simple_backend/Dockerfile
+    container_name: swasya_fastapi_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MONGODB_URL=mongodb://mongo:27017
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - clinical_net
+
+  # =========================================================================
+  # 3. Swasya AI Doctor Dashboard & Command Center (React Tailwind)
+  # =========================================================================
+  swasya-client:
+    build:
+      context: ../swasya_ai/client
+      dockerfile: Dockerfile
+    container_name: swasya_doctor_dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - swasya-backend
+    networks:
+      - clinical_net
+
+  # =========================================================================
+  # 4. Sanjeevni AI Edge Kiosk Backend (Express Node.js, Rhubarb, SQLite)
+  # =========================================================================
+  sanjeevni-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sanjeevni_kiosk_backend
+    restart: unless-stopped
+    ports:
+      - "3125:3125"
+    environment:
+      - PORT=3125
+      - SWASYA_API_URL=http://swasya-backend:8000
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - MURF_API_KEY=${MURF_API_KEY}
+      - RHUBARB_PATH=/opt/Rhubarb-Lip-Sync-1.13.0-Linux/rhubarb
+    depends_on:
+      - swasya-backend
+    volumes:
+      - sanjeevni_db:/app/data
+    networks:
+      - clinical_net
+
+  # =========================================================================
+  # 5. Sanjeevni AI 3D Virtual Doctor Kiosk Frontend (React Three Fiber, Vite)
+  # =========================================================================
+  sanjeevni-kiosk:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sanjeevni_avatar_kiosk
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3125
+      - VITE_SWASYA_API_URL=http://localhost:8000
+    depends_on:
+      - sanjeevni-backend
+    networks:
+      - clinical_net
+
+networks:
+  clinical_net:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  sanjeevni_db:
+

@@ -1,8 +1,9 @@
 import { exec } from "child_process";
 import cors from "cors";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import express from "express";
-import { promises as fs } from "fs";
+import { createReadStream, promises as fs } from "fs";
 import Groq from "groq-sdk";
 import multer from "multer";
 import db from "./db.js";
@@ -35,9 +36,44 @@ const port = process.env.PORT || 3125;
 // Groq model — change here if you want to upgrade/downgrade
 const GROQ_MODEL = process.env.GROQ_MODEL || "groq/compound-mini";
 
-// ── Global state variables (declared here to avoid ReferenceError in routes) ──
-let chatHistory = [];
-let currentPatient = null;
+// ── Session Management (Fixes Multi-Patient & Multi-Kiosk Race Conditions) ──
+const sessions = new Map();
+
+const getSession = (sessionId) => {
+  const sid = (sessionId || "default-kiosk").trim();
+  if (!sessions.has(sid)) {
+    sessions.set(sid, {
+      id: sid,
+      chatHistory: [],
+      currentPatient: null,
+      createdAt: Date.now(),
+      lastActive: Date.now()
+    });
+  }
+  const s = sessions.get(sid);
+  s.lastActive = Date.now();
+  return s;
+};
+
+// Periodic session cleanup (> 3 hours idle)
+setInterval(() => {
+  const cutoff = Date.now() - 3 * 60 * 60 * 1000;
+  for (const [sid, session] of sessions.entries()) {
+    if (session.lastActive < cutoff) {
+      sessions.delete(sid);
+    }
+  }
+}, 30 * 60 * 1000);
+
+// Session middleware: bind req.session for all incoming requests
+app.use((req, res, next) => {
+  const sid = req.headers["x-session-id"] || req.query.sessionId || req.body?.sessionId || "default-kiosk";
+  req.session = getSession(sid);
+  res.setHeader("x-session-id", req.session.id);
+  next();
+});
+
+// ── Global state variables (preserved for backward compatibility & queue) ──
 let patientQueue = []; // Doctor Dashboard Live Queue
 let latestTranscript = "";
 let pythonMode       = false;   // true = Python is in charge, React must stay silent
@@ -49,7 +85,46 @@ let RHUBARB_PATH = process.env.RHUBARB_PATH || (process.platform === "win32" ? "
 const FFMPEG_PATH = process.env.FFMPEG_PATH || (process.platform === "win32" ? "C:\\ffmpeg\\ffmpeg-8.1-essentials_build\\bin\\ffmpeg.exe" : "ffmpeg");
 
 app.get("/", (req, res) => {
-  res.send(`Sanjeevni AI backend running | Model: ${GROQ_MODEL}`);
+  res.send(`Sanjeevni AI backend running | Model: ${GROQ_MODEL} | Active Sessions: ${sessions.size}`);
+});
+
+// Reset a session for a new patient
+app.post("/api/session/reset", (req, res) => {
+  const sid = req.session.id;
+  sessions.delete(sid);
+  const freshSession = getSession(sid);
+  res.json({ success: true, message: `Session ${sid} reset cleanly.` });
+});
+
+// Universal Speech-to-Text via Groq Whisper Large v3
+app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file provided" });
+    }
+
+    await ensureAudiosFolder();
+    const tempAudioPath = `audios/whisper_${Date.now()}_${Math.random().toString(36).slice(2)}.webm`;
+    await fs.writeFile(tempAudioPath, req.file.buffer);
+
+    const fileStream = createReadStream(tempAudioPath);
+
+    const lang = req.body.language === "hi-IN" ? "hi" : undefined;
+    const transcription = await groq.audio.transcriptions.create({
+      file: fileStream,
+      model: "whisper-large-v3",
+      language: lang,
+      response_format: "json",
+      temperature: 0.0,
+    });
+
+    await fs.unlink(tempAudioPath).catch(() => {});
+
+    res.json({ success: true, transcript: transcription.text || "" });
+  } catch (err) {
+    console.error("Transcription error:", err);
+    res.status(500).json({ error: "Failed to transcribe audio", details: err.message });
+  }
 });
 
 // Doctor Dashboard Queue API
@@ -325,13 +400,14 @@ const generateMurfAudio = async (text, outputFilePath, voiceId = MURF_VOICE_ID, 
   throw new Error("Murf response did not contain encodedAudio or audioFile");
 };
 
-const lipSyncMessage = async (messageIndex) => {
+// Unique-scoped phoneme extraction
+const lipSyncMessage = async (filePrefix) => {
   const time = Date.now();
-  console.log(`Starting conversion for message ${messageIndex}`);
+  console.log(`Starting conversion for ${filePrefix}`);
 
-  const mp3Path = `audios/message_${messageIndex}.mp3`;
-  const wavPath = `audios/message_${messageIndex}.wav`;
-  const jsonPath = `audios/message_${messageIndex}.json`;
+  const mp3Path = `audios/${filePrefix}.mp3`;
+  const wavPath = `audios/${filePrefix}.wav`;
+  const jsonPath = `audios/${filePrefix}.json`;
 
   await execCommand(`"${FFMPEG_PATH}" -y -i "${mp3Path}" "${wavPath}"`);
   console.log(`MP3 to WAV done in ${Date.now() - time}ms`);
@@ -351,40 +427,43 @@ app.post("/chat", async (req, res) => {
 
     await ensureAudiosFolder();
 
+    const session = req.session;
     const userMessage = req.body.message;
     
-    // 🔹 Initialize patient context if provided
+    // 🔹 Initialize patient context in session
     if (req.body.patientData) {
-      currentPatient = { ...currentPatient, ...req.body.patientData };
-      if (!currentPatient.id) {
-        currentPatient.id = Math.floor(1000 + Math.random() * 9000);
+      session.currentPatient = { ...(session.currentPatient || {}), ...req.body.patientData };
+      if (!session.currentPatient.id) {
+        session.currentPatient.id = Math.floor(1000 + Math.random() * 9000);
       }
       // Add or update in patient queue for Doctor Dashboard
-      const existingIdx = patientQueue.findIndex(p => String(p.id) === String(currentPatient.id));
+      const existingIdx = patientQueue.findIndex(p => String(p.id) === String(session.currentPatient.id));
       if (existingIdx >= 0) {
-        patientQueue[existingIdx] = { ...patientQueue[existingIdx], ...currentPatient };
+        patientQueue[existingIdx] = { ...patientQueue[existingIdx], ...session.currentPatient };
       } else {
-        patientQueue.unshift({ ...currentPatient });
+        patientQueue.unshift({ ...session.currentPatient });
       }
 
       // Save new patient to DB
       try {
-        const existing = db.prepare('SELECT id FROM patients WHERE id = ?').get(String(currentPatient.id));
+        const existing = db.prepare('SELECT id FROM patients WHERE id = ?').get(String(session.currentPatient.id));
         if (!existing) {
           const insertStmt = db.prepare('INSERT INTO patients (id, abhaId, name, age, mobile, language) VALUES (?, ?, ?, ?, ?, ?)');
           insertStmt.run(
-            String(currentPatient.id),
-            currentPatient.abhaId || "",
-            currentPatient.name || "Unknown",
-            String(currentPatient.age || ""),
-            currentPatient.mobile || "",
-            currentPatient.language || "en-IN"
+            String(session.currentPatient.id),
+            session.currentPatient.abhaId || "",
+            session.currentPatient.name || "Unknown",
+            String(session.currentPatient.age || ""),
+            session.currentPatient.mobile || "",
+            session.currentPatient.language || "en-IN"
           );
         }
       } catch (dbErr) {
         console.error("Failed to save patient to DB:", dbErr);
       }
     }
+
+    const currentPatient = session.currentPatient;
 
     // 🔹 Default intro if no message and no new patient
     if (!userMessage && !req.body.patientData) {
@@ -423,25 +502,23 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    // 🔹 Add user message to memory (if there is one)
-    // If this is an initial patient setup ping (patientData but no message),
-    // inject a synthetic greeting prompt so Groq always gets a valid 'user' turn
+    // 🔹 Add user message to session memory
     if (userMessage) {
-      chatHistory.push({
+      session.chatHistory.push({
         role: "user",
         content: userMessage,
       });
     } else if (req.body.patientData) {
       // Synthetic first message — triggers a personalised welcome from the AI
-      chatHistory.push({
+      session.chatHistory.push({
         role: "user",
         content: "Please greet me warmly by my name and ask what body part or health problem is bothering me today.",
       });
     }
 
-    // 🔹 Limit memory (last 30 messages)
-    if (chatHistory.length > 30) {
-      chatHistory = chatHistory.slice(-30);
+    // 🔹 Limit session memory (last 30 messages)
+    if (session.chatHistory.length > 30) {
+      session.chatHistory = session.chatHistory.slice(-30);
     }
 
     const clinicalSystem = currentPatient?.system === 'ayush' ? 'AYUSH (Ayurveda)' : 'Allopathic';
@@ -534,7 +611,7 @@ EMOTION & ANIMATION GUIDE:
 - Concern about symptoms → concerned + Talking_1
 - Urgent / serious symptom → sad + Talking_1`,
         },
-        ...chatHistory,
+        ...session.chatHistory,
       ],
     });
 
@@ -546,7 +623,6 @@ EMOTION & ANIMATION GUIDE:
 
     // 🔹 Safe JSON parsing
     try {
-      // Remove any unintentional markdown fences if present
       const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
       parsed = JSON.parse(cleaned);
       messages = parsed.messages || parsed;
@@ -566,21 +642,24 @@ EMOTION & ANIMATION GUIDE:
       messages = [messages];
     }
 
-    // 🔹 Save assistant reply in memory (only text)
-    chatHistory.push({
+    // 🔹 Save assistant reply in session memory
+    session.chatHistory.push({
       role: "assistant",
       content: messages.map((m) => m.text).join(" "),
     });
 
-    // 🔊 TTS + Lipsync processing
+    // 🔊 TTS + Lipsync processing with UNIQUE Session-scoped file paths
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
-      const fileName = `audios/message_${i}.mp3`;
+      const safeSessionId = session.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const filePrefix = `${safeSessionId}_${Date.now()}_${i}`;
+      const fileName = `audios/${filePrefix}.mp3`;
+      const wavName = `audios/${filePrefix}.wav`;
+      const jsonName = `audios/${filePrefix}.json`;
       const textInput = message.text || "Hello";
 
-      console.log(`🔊 Generating audio ${i} in ${currentPatient?.language || 'en-IN'}:`, textInput);
+      console.log(`🔊 Generating audio ${i} for session ${session.id}:`, textInput);
 
-      // Select voice based on language
       let voiceId = MURF_VOICE_ID || "Natalie";
       let locale = MURF_LOCALE || "en-US";
       
@@ -594,15 +673,19 @@ EMOTION & ANIMATION GUIDE:
 
       try {
         await generateMurfAudio(textInput, fileName, voiceId, locale);
-        await lipSyncMessage(i);
+        await lipSyncMessage(filePrefix);
 
         message.audio = await audioFileToBase64(fileName);
-        message.lipsync = await readJsonTranscript(
-          `audios/message_${i}.json`
-        );
+        message.lipsync = await readJsonTranscript(jsonName);
+
+        // Clean up temporary audio files asynchronously to prevent disk bloat
+        Promise.all([
+          fs.unlink(fileName).catch(() => {}),
+          fs.unlink(wavName).catch(() => {}),
+          fs.unlink(jsonName).catch(() => {})
+        ]);
       } catch (ttsError) {
         console.error("⚠️ TTS/Lipsync failed:", ttsError.message);
-
         message.audio = null;
         message.lipsync = { mouthCues: [] };
       }
@@ -628,6 +711,9 @@ EMOTION & ANIMATION GUIDE:
 
 app.post("/generate-summary", async (req, res) => {
   try {
+    const session = req.session;
+    const currentPatient = session.currentPatient;
+
     if (!currentPatient) {
       return res.status(400).json({ error: "No patient session active." });
     }
@@ -651,7 +737,7 @@ Past Medical/Surgical History:
 Review of Systems:`}
 
 Conversation:
-${chatHistory.map(m => m.role.toUpperCase() + ": " + m.content).join("\n")}
+${session.chatHistory.map(m => m.role.toUpperCase() + ": " + m.content).join("\n")}
 
 Return ONLY the markdown formatted summary.`;
 
@@ -719,8 +805,8 @@ app.post("/upload-document", upload.single('document'), async (req, res) => {
     
     const extractedData = completion.choices[0]?.message?.content || "No text could be extracted.";
     
-    // Inject the extracted data into the conversation history so the Avatar knows about it
-    chatHistory.push({
+    // Inject the extracted data into session conversation history
+    req.session.chatHistory.push({
       role: "system",
       content: `[SYSTEM ALERT: The patient has uploaded a prior medical document before the consultation. Here is the AI-extracted summary of that document:\n\n${extractedData}\n\nAcknowledge this in your first response and use it to guide your history taking.]`
     });
@@ -734,6 +820,8 @@ app.post("/upload-document", upload.single('document'), async (req, res) => {
 
 app.post("/send-to-doctor", async (req, res) => {
   try {
+    const session = req.session;
+    const currentPatient = session.currentPatient;
     const { name, age, mobile, id } = req.body;
     
     // 1. Fetch history from Swasya AI
@@ -741,7 +829,9 @@ app.post("/send-to-doctor", async (req, res) => {
     let historyContext = "No previous medical history found in Swasya records.";
     try {
       console.log(`🔍 Fetching history for patient ${id} from Swasya at ${swasyaBaseUrl}...`);
-      const swasyaSummaryRes = await fetch(`${swasyaBaseUrl}/patients/summary/${id}`);
+      const swasyaSummaryRes = await fetch(`${swasyaBaseUrl}/patients/summary/${id}`, {
+        signal: AbortSignal.timeout(2000)
+      });
       if (swasyaSummaryRes.ok) {
         const sData = await swasyaSummaryRes.json();
         if (sData.success) {
@@ -764,7 +854,7 @@ ${sData.latest_visit?.soap_note?.assessment || "None"}
       console.warn("⚠️ Could not fetch patient history context:", err.message);
     }
 
-    // 2. Generate summary from chatHistory with context
+    // 2. Generate summary from session chatHistory with context
     const prompt = `You are an AI generating a medical consultation summary. 
 Patient info: Name: ${name}, Age: ${age}, Mobile: ${mobile}
 
@@ -772,7 +862,7 @@ PAST MEDICAL HISTORY (from records):
 ${historyContext}
 
 Current Consultation History:
-${chatHistory.map(m => m.role.toUpperCase() + ": " + m.content).join("\n")}
+${session.chatHistory.map(m => m.role.toUpperCase() + ": " + m.content).join("\n")}
 
 Provide a concise, professional medical summary of the patient's current symptoms and conditions discussed. 
 Incorporate past history ONLY if it's relevant to the current symptoms (e.g., if a symptom is worsening since the last visit).
@@ -866,9 +956,10 @@ app.post("/lip-sync", async (req, res) => {
     console.log(`💋 Lip-sync audio size: ${audioBase64.length} chars`);
 
     const audioBuffer = Buffer.from(audioBase64, "base64");
-    const mp3Path  = `audios/api_lipsync.mp3`;
-    const wavPath  = `audios/api_lipsync.wav`;
-    const jsonPath = `audios/api_lipsync.json`;
+    const uniquePrefix = `api_lipsync_${Date.now()}`;
+    const mp3Path  = `audios/${uniquePrefix}.mp3`;
+    const wavPath  = `audios/${uniquePrefix}.wav`;
+    const jsonPath = `audios/${uniquePrefix}.json`;
 
     await fs.writeFile(mp3Path, audioBuffer);
     console.log("💋 Audio written, starting FFmpeg...");
@@ -883,6 +974,14 @@ app.post("/lip-sync", async (req, res) => {
 
     const lipsync = await readJsonTranscript(jsonPath);
     console.log(`💋 Mouth cues: ${lipsync.mouthCues?.length}`);
+
+    // Clean up
+    Promise.all([
+      fs.unlink(mp3Path).catch(() => {}),
+      fs.unlink(wavPath).catch(() => {}),
+      fs.unlink(jsonPath).catch(() => {})
+    ]);
+
     res.send({ lipsync });
   } catch (err) {
     console.error("Lip-sync error:", err);
