@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:3125";
+const backendUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? "https://sanjeevni-ai-1.onrender.com" : "http://localhost:3125");
 
 export const DoctorDashboard = ({ onClose }) => {
   const [patients, setPatients] = useState([]);
