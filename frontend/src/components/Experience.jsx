@@ -58,10 +58,10 @@ export const Experience = () => {
     }
     if (cameraZoomed) {
       // Attentive close-up for conversational consultation
-      cameraControls.current?.setLookAt(0, 1.34, 1.65, 0, 1.30, 0, true);
+      cameraControls.current?.setLookAt(0, 1.42, 1.65, 0, 1.38, 0, true);
     } else {
-      // Prominent full-body clinical presence (head to toe fully visible, perfectly centered)
-      cameraControls.current?.setLookAt(0, 0.88, 3.45, 0, 0.84, 0, true);
+      // Prominent full-body clinical presence (head to toe fully visible above UI bar)
+      cameraControls.current?.setLookAt(0, 0.96, 3.85, 0, 0.92, 0, true);
     }
   }, [cameraZoomed]);
 
@@ -69,14 +69,12 @@ export const Experience = () => {
     <>
       <CameraControls ref={cameraControls} />
 
-      {/* 🔹 Professional Medical Studio Lighting (Soft Key, Fill, Rim & Stethoscope Catchlight) */}
-      <ambientLight intensity={0.55} color="#F8FAFC" />
-      <directionalLight position={[2.5, 4.5, 3.5]} intensity={0.95} castShadow color="#FFFDF7" />
-      <directionalLight position={[-3.5, 3.0, 2.0]} intensity={0.50} color="#E0F2FE" />
-      <directionalLight position={[0, 3.5, -2.5]} intensity={0.45} color="#CCFBF1" />
-      <pointLight position={[0, 1.7, 1.5]} intensity={0.25} color="#FFFFFF" />
-      {/* Focused illumination on Stethoscope & Hospital ID Badge */}
-      <pointLight position={[0, 1.2, 1.1]} intensity={0.40} color="#FFFFFF" />
+      {/* 🔹 Professional Medical Studio Lighting (Balanced Key, Soft Fill, Subtle Rim) */}
+      <ambientLight intensity={0.65} color="#FFFFFF" />
+      <directionalLight position={[2.0, 4.0, 3.5]} intensity={0.80} castShadow color="#FFFDF7" />
+      <directionalLight position={[-2.5, 2.5, 2.0]} intensity={0.35} color="#F0FDF4" />
+      <directionalLight position={[0, 3.0, -2.5]} intensity={0.30} color="#CCFBF1" />
+      <pointLight position={[0, 1.3, 1.2]} intensity={0.20} color="#FFFFFF" />
 
       {/* Wrapping Environment into Suspense so CDN delays/blocks never hang the 3D scene */}
       <Suspense fallback={null}>
@@ -85,11 +83,11 @@ export const Experience = () => {
 
       {/* Wrapping Dots into Suspense to prevent Blink when Troika/Font is loaded */}
       <Suspense fallback={null}>
-        <Dots position-y={1.75} position-x={-0.02} />
+        <Dots position-y={1.82} position-x={-0.02} />
       </Suspense>
 
       <Suspense fallback={null}>
-        <Avatar />
+        <Avatar position-y={0.08} />
       </Suspense>
 
       <ContactShadows opacity={0.5} scale={10} blur={2.5} far={4} color="#0D9488" />

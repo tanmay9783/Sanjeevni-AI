@@ -75,8 +75,9 @@ let setupMode = false;
 export function Avatar(props) {
   const { nodes, materials, scene } = useGLTF("/models/64f1a714fe61576b46f27ca2.glb");
 
-  const [badgeTexture] = useTexture([
+  const [badgeTexture, faceTexture] = useTexture([
     "/textures/doctor_badge.svg",
+    "/models/doctor_face.png",
   ]);
 
   const { message, onMessagePlayed, chat } = useChat();
@@ -150,37 +151,41 @@ export function Avatar(props) {
   // ── Natural Indian Skin Tone & Subtle Physician Grooming ───────────────────
   useEffect(() => {
     if (materials?.Wolf3D_Skin) {
-      // Warm medium Indian olive-golden skin tone tinting the natural base texture
-      materials.Wolf3D_Skin.color = new THREE.Color("#D29774");
-      materials.Wolf3D_Skin.roughness = 0.65;
+      if (faceTexture) {
+        faceTexture.flipY = false;
+        faceTexture.colorSpace = THREE.SRGBColorSpace;
+        faceTexture.needsUpdate = true;
+        materials.Wolf3D_Skin.map = faceTexture;
+      }
+      // Radiant, warm medium Indian golden complexion
+      materials.Wolf3D_Skin.color = new THREE.Color("#E8B99D");
+      materials.Wolf3D_Skin.roughness = 0.55;
       materials.Wolf3D_Skin.metalness = 0.0;
       materials.Wolf3D_Skin.needsUpdate = true;
     }
 
     if (materials?.Wolf3D_Body) {
-      // Matching natural medium Indian skin tone for hands
-      materials.Wolf3D_Body.color = new THREE.Color("#D29774");
-      materials.Wolf3D_Body.roughness = 0.65;
+      // Natural medium Indian skin tone for hands and neck
+      materials.Wolf3D_Body.color = new THREE.Color("#BD8262");
+      materials.Wolf3D_Body.roughness = 0.55;
       materials.Wolf3D_Body.metalness = 0.0;
       materials.Wolf3D_Body.needsUpdate = true;
     }
 
-    if (materials?.Wolf3D_Hair) {
-      // Professional espresso black hair
-      materials.Wolf3D_Hair.color = new THREE.Color("#181513");
-      materials.Wolf3D_Hair.roughness = 0.58;
-      materials.Wolf3D_Hair.metalness = 0.03;
-      materials.Wolf3D_Hair.needsUpdate = true;
-    }
-
     if (materials?.Wolf3D_Eye) {
-      // Natural deep dark brown iris
-      materials.Wolf3D_Eye.color = new THREE.Color("#2A1A0E");
-      materials.Wolf3D_Eye.roughness = 0.15;
-      materials.Wolf3D_Eye.metalness = 0.1;
+      // Natural dark brown iris with clean white sclera
+      materials.Wolf3D_Eye.color = new THREE.Color("#FFFFFF");
+      materials.Wolf3D_Eye.roughness = 0.10;
+      materials.Wolf3D_Eye.metalness = 0.05;
       materials.Wolf3D_Eye.needsUpdate = true;
     }
-  }, [materials]);
+
+    if (materials?.Wolf3D_Teeth) {
+      materials.Wolf3D_Teeth.color = new THREE.Color("#FFFFFF");
+      materials.Wolf3D_Teeth.roughness = 0.20;
+      materials.Wolf3D_Teeth.needsUpdate = true;
+    }
+  }, [materials, faceTexture]);
 
   // ── Message handler: process audio, lipsync, animation ─────────────────────
   useEffect(() => {
@@ -458,13 +463,7 @@ export function Avatar(props) {
         skeleton={nodes.Wolf3D_Body.skeleton}
       />
 
-      {/* 🩺 Hair: Head scalp hair + back ponytail gather */}
-      <skinnedMesh
-        name="Wolf3D_Hair"
-        geometry={nodes.Wolf3D_Hair.geometry}
-        material={doctorMaterials.hair}
-        skeleton={nodes.Wolf3D_Hair.skeleton}
-      />
+      {/* 🩺 Sleek Professional Ponytail Hairstyle (conforming scalp cap + elastic tie + low ponytail) */}
       <skinnedMesh
         name="Doctor_Hair_Ponytail"
         geometry={ponytailHairGeom}
