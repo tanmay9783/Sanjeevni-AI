@@ -5,6 +5,7 @@ import { button, useControls } from "leva";
 import * as THREE from "three";
 import { useChat } from "../hooks/useChat";
 import {
+  createAnatomicalBodyGeometry,
   createLabCoatGeometry,
   createScrubTopGeometry,
   createScrubTrousersGeometry,
@@ -86,6 +87,26 @@ export function Avatar(props) {
   const audioRef = useRef(null);
   const lastPlayedMessageRef = useRef(null);
 
+  // ── URL Dev Inspection Parameters ──────────────────────────────────────────
+  const urlParams = useMemo(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams();
+  }, []);
+
+  const initTPose = urlParams.get("anim") === "TPose";
+  const initWireframe = urlParams.get("wireframe") === "true";
+  const [isWireframe, setIsWireframe] = useState(initWireframe);
+  const [showBody, setShowBody] = useState(urlParams.get("showBody") !== "false");
+  const [showCoat, setShowCoat] = useState(urlParams.get("showCoat") !== "false");
+  const [showScrubTop, setShowScrubTop] = useState(urlParams.get("showScrubTop") !== "false");
+  const [showTrousers, setShowTrousers] = useState(urlParams.get("showTrousers") !== "false");
+  const [showSneakers, setShowSneakers] = useState(urlParams.get("showSneakers") !== "false");
+  const [showStethoscope, setShowStethoscope] = useState(urlParams.get("showStethoscope") !== "false");
+  const [showBadge, setShowBadge] = useState(urlParams.get("showBadge") !== "false");
+  const [showHair, setShowHair] = useState(urlParams.get("showHair") !== "false");
+
   // ── All hot refs so useFrame never has stale closures ─────────────────────
   const lipsyncRef = useRef(null);
   const facialExpressionRef = useRef("default");
@@ -133,11 +154,13 @@ export function Avatar(props) {
   );
 
   const [animation, setAnimation] = useState(() => {
+    if (initTPose) return "TPose";
     if (cleanedAnimations.find((a) => a.name === "Idle")) return "Idle";
     return cleanedAnimations[0]?.name || "";
   });
 
   // ── Generate 3D Skinned Doctor Wardrobe Geometries & Materials ─────────────
+  const anatomicalBodyGeom = useMemo(() => createAnatomicalBodyGeometry(), []);
   const labCoatGeom = useMemo(() => createLabCoatGeometry(), []);
   const scrubTopGeom = useMemo(() => createScrubTopGeometry(), []);
   const scrubTrousersGeom = useMemo(() => createScrubTrousersGeometry(), []);
@@ -147,6 +170,26 @@ export function Avatar(props) {
   const ponytailHairGeom = useMemo(() => createPonytailHairGeometry(), []);
 
   const doctorMaterials = useMemo(() => getDoctorMaterials(badgeTexture), [badgeTexture]);
+
+  // ── Wireframe inspection toggle ───────────────────────────────────────────
+  useEffect(() => {
+    if (doctorMaterials) {
+      Object.values(doctorMaterials).forEach((m) => {
+        if (m) {
+          m.wireframe = isWireframe;
+          m.needsUpdate = true;
+        }
+      });
+    }
+    if (materials) {
+      Object.values(materials).forEach((m) => {
+        if (m) {
+          m.wireframe = isWireframe;
+          m.needsUpdate = true;
+        }
+      });
+    }
+  }, [isWireframe, doctorMaterials, materials]);
 
   // ── Natural Indian Skin Tone & Subtle Physician Grooming ───────────────────
   useEffect(() => {
@@ -165,7 +208,7 @@ export function Avatar(props) {
     }
 
     if (materials?.Wolf3D_Body) {
-      // Natural medium Indian skin tone for hands and neck
+      // Natural medium Indian skin tone for anatomical torso, neck, and hands
       materials.Wolf3D_Body.color = new THREE.Color("#BD8262");
       materials.Wolf3D_Body.roughness = 0.55;
       materials.Wolf3D_Body.metalness = 0.0;
@@ -191,7 +234,7 @@ export function Avatar(props) {
   useEffect(() => {
     if (!message) {
       hasMessageRef.current = false;
-      setAnimation("Idle");
+      if (!initTPose) setAnimation("Idle");
       setLipsync(null);
       setFacialExpression("default");
       return;
@@ -257,7 +300,7 @@ export function Avatar(props) {
       setAnimation("Idle");
       onMessagePlayed();
     }
-  }, [message]);
+  }, [message, initTPose]);
 
   // ── Unblock browser autoplay on first user interaction ─────────────────────
   useEffect(() => {
@@ -277,6 +320,12 @@ export function Avatar(props) {
 
   // ── Animation action transitions ───────────────────────────────────────────
   useEffect(() => {
+    if (animation === "TPose") {
+      if (actions) {
+        Object.values(actions).forEach((a) => a?.stop());
+      }
+      return;
+    }
     if (!actions || !animation) return;
     const currentAction = actions[animation];
     if (currentAction) {
@@ -357,13 +406,25 @@ export function Avatar(props) {
     winkRight: button(() => { setWinkRight(true); setTimeout(() => setWinkRight(false), 300); }),
     animation: {
       value: animation,
-      options: animationNames,
+      options: ["TPose", ...animationNames],
       onChange: (value) => setAnimation(value),
     },
     facialExpression: {
       options: Object.keys(facialExpressions),
       onChange: (value) => setFacialExpression(value),
     },
+  });
+
+  useControls("DevInspection", {
+    showBody: { value: showBody, onChange: (v) => setShowBody(v) },
+    showCoat: { value: showCoat, onChange: (v) => setShowCoat(v) },
+    showScrubTop: { value: showScrubTop, onChange: (v) => setShowScrubTop(v) },
+    showTrousers: { value: showTrousers, onChange: (v) => setShowTrousers(v) },
+    showSneakers: { value: showSneakers, onChange: (v) => setShowSneakers(v) },
+    showStethoscope: { value: showStethoscope, onChange: (v) => setShowStethoscope(v) },
+    showBadge: { value: showBadge, onChange: (v) => setShowBadge(v) },
+    showHair: { value: showHair, onChange: (v) => setShowHair(v) },
+    wireframe: { value: isWireframe, onChange: (v) => setIsWireframe(v) },
   });
 
   // ── Blinking loop ──────────────────────────────────────────────────────────
@@ -397,7 +458,7 @@ export function Avatar(props) {
       const params = new URLSearchParams(window.location.search);
       const filename = params.get("filename") || "rendered_avatar.png";
       const animParam = params.get("anim");
-      if (animParam && actions[animParam]) {
+      if (animParam && actions[animParam] && animParam !== "TPose") {
         actions[animParam].reset().fadeIn(0.2).play();
       }
 
@@ -416,7 +477,7 @@ export function Avatar(props) {
             console.warn("toDataURL error", e);
           }
         }
-      }, 3500);
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [actions]);
@@ -425,50 +486,66 @@ export function Avatar(props) {
     <group {...props} dispose={null} ref={group}>
       <primitive object={nodes.Hips} />
 
+      {/* 🩺 Complete Underlying Anatomical Human Body (Mixamo 67-Bone Rigged) */}
+      <skinnedMesh
+        name="Doctor_AnatomicalBody"
+        geometry={anatomicalBodyGeom}
+        material={materials.Wolf3D_Body}
+        skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showBody}
+      />
+
       {/* 🩺 Realistic 3D Physician Garments (Mixamo 67-Bone Rigged) */}
       <skinnedMesh
         name="Doctor_LabCoat"
         geometry={labCoatGeom}
         material={doctorMaterials.coat}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showCoat}
       />
       <skinnedMesh
         name="Doctor_ScrubTop"
         geometry={scrubTopGeom}
         material={doctorMaterials.scrubs}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showScrubTop}
       />
       <skinnedMesh
         name="Doctor_ScrubTrousers"
         geometry={scrubTrousersGeom}
         material={doctorMaterials.scrubs}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showTrousers}
       />
       <skinnedMesh
         name="Doctor_Sneakers"
         geometry={sneakersGeom}
         material={doctorMaterials.sneakers}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showSneakers}
       />
       <skinnedMesh
         name="Doctor_Stethoscope"
         geometry={stethoscopeGeom}
         material={doctorMaterials.stethoscope}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showStethoscope}
       />
       <skinnedMesh
         name="Doctor_ID_Badge"
         geometry={idBadgeGeom}
         material={doctorMaterials.idBadge}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showBadge}
       />
 
-      {/* 🩺 Sleek Professional Ponytail Hairstyle (conforming scalp cap + elastic tie + low ponytail) */}
+      {/* 🩺 Sleek Professional Ponytail Hairstyle (conforming scalp cap + elastic tie + low bun) */}
       <skinnedMesh
         name="Doctor_Hair_Ponytail"
         geometry={ponytailHairGeom}
         material={doctorMaterials.hair}
         skeleton={nodes.Wolf3D_Body.skeleton}
+        visible={showHair}
       />
 
       {/* 🩺 Anatomical Body: Hands */}

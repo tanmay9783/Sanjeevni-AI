@@ -51,8 +51,23 @@ export const Experience = () => {
       } else if (view === "uniform") {
         cameraControls.current?.setLookAt(0, 1.15, 1.40, 0, 1.12, 0);
         return;
-      } else if (view === "side") {
-        cameraControls.current?.setLookAt(1.9, 0.95, 1.9, 0, 0.90, 0);
+      } else if (view === "steth") {
+        cameraControls.current?.setLookAt(0.0, 1.33, 0.82, 0.0, 1.28, 0.12);
+        return;
+      } else if (view === "side" || view === "right") {
+        cameraControls.current?.setLookAt(2.8, 0.96, 0, 0, 0.92, 0);
+        return;
+      } else if (view === "left") {
+        cameraControls.current?.setLookAt(-2.8, 0.96, 0, 0, 0.92, 0);
+        return;
+      } else if (view === "back") {
+        cameraControls.current?.setLookAt(0, 0.96, -3.85, 0, 0.92, 0);
+        return;
+      } else if (view === "threequarter") {
+        cameraControls.current?.setLookAt(1.8, 1.05, 2.8, 0, 0.95, 0);
+        return;
+      } else if (view === "front") {
+        cameraControls.current?.setLookAt(0, 0.96, 3.85, 0, 0.92, 0);
         return;
       }
     }

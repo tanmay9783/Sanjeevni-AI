@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  createAnatomicalBodyGeometry,
   createLabCoatGeometry,
   createScrubTopGeometry,
   createScrubTrousersGeometry,
@@ -99,6 +100,15 @@ async function buildDoctorAsset() {
     // Create the new doctor garments and bind to the skeleton
     const materials = getDoctorMaterials(null);
 
+    // 0. Anatomical human body under garments
+    const bodyMeshRef = scene.getObjectByName("Wolf3D_Body");
+    const anatomicalGeom = createAnatomicalBodyGeometry();
+    const anatomicalMesh = new THREE.SkinnedMesh(anatomicalGeom, bodyMeshRef?.material || materials.scrubs);
+    anatomicalMesh.name = "Doctor_AnatomicalBody";
+    anatomicalMesh.bind(skeleton);
+    scene.add(anatomicalMesh);
+    console.log("Added skinned mesh: Doctor_AnatomicalBody");
+
     const labCoatGeom = createLabCoatGeometry();
     const labCoatMesh = new THREE.SkinnedMesh(labCoatGeom, materials.coat);
     labCoatMesh.name = "Doctor_LabCoat";
@@ -186,4 +196,3 @@ function validateExportedGLB(glbPath) {
 }
 
 buildDoctorAsset().catch(console.error);
-
