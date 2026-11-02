@@ -112,6 +112,9 @@ export function Avatar(props) {
   const facialExpressionRef = useRef("default");
   const pendingAudioRef = useRef(null);
   const hasMessageRef = useRef(false);
+  const isSpeakingRef = useRef(false);
+  const speechStartTimeRef = useRef(0);
+  const speechTimerRef = useRef(null);
 
   const [lipsync, setLipsyncState] = useState(null);
   const [facialExpression, setFacialExpressionState] = useState("default");
@@ -135,16 +138,22 @@ export function Avatar(props) {
     return animationGltf.animations
       .map((clip) => {
         const validTracks = clip.tracks.filter((track) => {
-          return !(
+          if (
             track.name === "Armature.position" ||
             track.name === "Armature.quaternion" ||
             track.name === "Armature.scale"
-          );
+          ) return false;
+          // Filter out Mixamo leaf/dummy end-bone tracks not present on ReadyPlayerMe skeleton
+          if (track.name.includes("_end.") || track.name.includes("_End_end.")) return false;
+          // Verify bone exists in loaded rig nodes
+          const nodeName = track.name.split(".")[0];
+          if (nodes && !nodes[nodeName]) return false;
+          return true;
         });
         return new THREE.AnimationClip(clip.name, clip.duration, validTracks);
       })
       .filter((clip) => clip.tracks.length > 0);
-  }, [animationGltf.animations]);
+  }, [animationGltf.animations, nodes]);
 
   const { actions } = useAnimations(cleanedAnimations, group);
 
@@ -234,6 +243,8 @@ export function Avatar(props) {
   useEffect(() => {
     if (!message) {
       hasMessageRef.current = false;
+      isSpeakingRef.current = false;
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
       if (!initTPose) setAnimation("Idle");
       setLipsync(null);
       setFacialExpression("default");
@@ -251,10 +262,29 @@ export function Avatar(props) {
       audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
+    if (speechTimerRef.current) {
+      clearTimeout(speechTimerRef.current);
+      speechTimerRef.current = null;
+    }
 
     setFacialExpression(message.facialExpression || "default");
     const chosenAnim = message.animation || "Talking_1";
     setAnimation(animationNames.includes(chosenAnim) ? chosenAnim : "Talking_1");
+
+    const onPlaybackComplete = () => {
+      hasMessageRef.current = false;
+      isSpeakingRef.current = false;
+      setLipsync(null);
+      setFacialExpression("default");
+      setAnimation("Idle");
+      audioRef.current = null;
+      pendingAudioRef.current = null;
+      if (speechTimerRef.current) {
+        clearTimeout(speechTimerRef.current);
+        speechTimerRef.current = null;
+      }
+      onMessagePlayed();
+    };
 
     if (message.audio) {
       try {
@@ -266,41 +296,79 @@ export function Avatar(props) {
           setLipsync(message.lipsync);
         }
 
-        audio.onended = () => {
-          hasMessageRef.current = false;
-          setLipsync(null);
-          setFacialExpression("default");
-          setAnimation("Idle");
-          audioRef.current = null;
-          pendingAudioRef.current = null;
-          onMessagePlayed();
-        };
-
+        audio.onended = onPlaybackComplete;
         audio.onerror = () => {
-          hasMessageRef.current = false;
-          setLipsync(null);
-          setAnimation("Idle");
-          audioRef.current = null;
-          pendingAudioRef.current = null;
-          onMessagePlayed();
+          // If base64 audio decoding fails, fallback to Web Speech
+          fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
         };
 
         audio.play().catch(() => {
           pendingAudioRef.current = audio;
         });
       } catch (err) {
-        hasMessageRef.current = false;
-        setLipsync(null);
-        setAnimation("Idle");
-        onMessagePlayed();
+        fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
       }
     } else {
-      hasMessageRef.current = false;
-      setLipsync(null);
-      setAnimation("Idle");
-      onMessagePlayed();
+      // No audio payload returned: use Web Speech API fallback
+      fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
     }
   }, [message, initTPose]);
+
+  // ── Web Speech API Fallback: speaks text & triggers speech animation ───────
+  const fallbackToSpeechSynthesis = (text, onComplete) => {
+    if (!text || typeof window === "undefined") {
+      onComplete();
+      return;
+    }
+
+    isSpeakingRef.current = true;
+    speechStartTimeRef.current = Date.now();
+
+    const wordCount = text.trim().split(/\s+/).length;
+    // Doctor cadence: ~140 words per minute
+    const estimatedDurationMs = Math.max(2500, (wordCount / 2.3) * 1000);
+
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Find suitable voice (prefer Indian English or natural female voice)
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => 
+          (v.lang.includes("en-IN") || v.lang.includes("hi-IN")) &&
+          (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("zira") || v.name.toLowerCase().includes("google"))
+        ) || voices.find(v => v.lang.includes("en-IN")) || voices.find(v => v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("zira")) || voices[0];
+
+        if (preferredVoice) utterance.voice = preferredVoice;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.05;
+
+        utterance.onend = () => {
+          onComplete();
+        };
+        utterance.onerror = () => {
+          onComplete();
+        };
+
+        window.speechSynthesis.speak(utterance);
+
+        // Safety fallback timer in case speech synthesis stalls
+        speechTimerRef.current = setTimeout(() => {
+          if (isSpeakingRef.current) {
+            onComplete();
+          }
+        }, estimatedDurationMs + 1500);
+
+        return;
+      } catch (e) {
+        console.warn("SpeechSynthesis error, falling back to timed animation:", e);
+      }
+    }
+
+    // Default timed animation if SpeechSynthesis is unavailable
+    speechTimerRef.current = setTimeout(onComplete, estimatedDurationMs);
+  };
 
   // ── Unblock browser autoplay on first user interaction ─────────────────────
   useEffect(() => {
@@ -371,7 +439,7 @@ export function Avatar(props) {
       });
     }
 
-    // Rhubarb Lip-Sync Viseme interpolation
+    // Rhubarb Lip-Sync Viseme interpolation & Procedural Speech Visemes
     const activeLipsync = lipsyncRef.current;
     const activeAudio = audioRef.current;
 
@@ -384,6 +452,24 @@ export function Avatar(props) {
           targetViseme = corresponding[mouthCue.value];
           break;
         }
+      }
+    } else if (isSpeakingRef.current) {
+      // Natural speech cadence viseme cycling when using Web Speech API
+      const elapsedSec = (Date.now() - speechStartTimeRef.current) / 1000;
+      const cadence = Math.sin(elapsedSec * 13);
+      const variant = Math.cos(elapsedSec * 9);
+      if (cadence > 0.3) {
+        if (variant > 0.35) {
+          targetViseme = "viseme_aa";
+        } else if (variant > -0.2) {
+          targetViseme = "viseme_I";
+        } else {
+          targetViseme = "viseme_O";
+        }
+      } else if (cadence > -0.2) {
+        targetViseme = "viseme_PP";
+      } else {
+        targetViseme = null; // brief closed mouth
       }
     }
 

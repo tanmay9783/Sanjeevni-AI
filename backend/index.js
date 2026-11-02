@@ -33,8 +33,10 @@ app.use(cors({
 
 const port = process.env.PORT || 3125;
 
-// Groq model — change here if you want to upgrade/downgrade
-const GROQ_MODEL = process.env.GROQ_MODEL || "groq/compound-mini";
+// Groq model — standard high-performance production models
+const GROQ_MODEL = process.env.GROQ_MODEL && process.env.GROQ_MODEL !== "groq/compound-mini" 
+  ? process.env.GROQ_MODEL 
+  : "llama-3.3-70b-versatile";
 
 // Swasya AI integration endpoint (defaults to deployed Render in production or localhost in dev)
 const SWASYA_API_URL = process.env.SWASYA_API_URL || (process.env.NODE_ENV === "production" ? "https://swasya-ai.onrender.com" : "http://localhost:8000");
@@ -330,13 +332,21 @@ const ensureAudiosFolder = async () => {
 };
 
 const readJsonTranscript = async (file) => {
-  const data = await fs.readFile(file, "utf8");
-  return JSON.parse(data);
+  try {
+    const data = await fs.readFile(file, "utf8");
+    return JSON.parse(data);
+  } catch (err) {
+    return { mouthCues: [] };
+  }
 };
 
 const audioFileToBase64 = async (file) => {
-  const data = await fs.readFile(file);
-  return data.toString("base64");
+  try {
+    const data = await fs.readFile(file);
+    return data.toString("base64");
+  } catch (err) {
+    return null;
+  }
 };
 
 // Download file from URL if Murf returns audioFile instead of encodedAudio
@@ -473,16 +483,16 @@ app.post("/chat", async (req, res) => {
       return res.send({
         messages: [
           {
-            text: "Hey dear. How are you feeling today?",
-            audio: await audioFileToBase64("audios/intro_0.wav"),
-            lipsync: await readJsonTranscript("audios/intro_0.json"),
+            text: "Namaste! I am Dr. Sanjeevni, your virtual healthcare assistant. How are you feeling today?",
+            audio: await audioFileToBase64("audios/api_lipsync.mp3"),
+            lipsync: await readJsonTranscript("audios/api_lipsync.json"),
             facialExpression: "smile",
             animation: "Talking_1",
           },
           {
-            text: "You can tell me anything. I'm here to help you 💙",
-            audio: await audioFileToBase64("audios/intro_1.wav"),
-            lipsync: await readJsonTranscript("audios/intro_1.json"),
+            text: "You can describe your symptoms or tap any area on the 3D body map. I am here to help you.",
+            audio: null,
+            lipsync: { mouthCues: [] },
             facialExpression: "smile",
             animation: "Talking_2",
           },
@@ -490,20 +500,9 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    // 🔹 API key check
-    if (!murfApiKey || !process.env.GROQ_API_KEY) {
-      return res.send({
-        messages: [
-          {
-            text: "Please add your API keys first.",
-            audio: await audioFileToBase64("audios/api_0.wav"),
-            lipsync: await readJsonTranscript("audios/api_0.json"),
-            facialExpression: "angry",
-            animation: "Angry",
-          },
-        ],
-      });
-    }
+    const hasValidGroqKey = process.env.GROQ_API_KEY && 
+      !process.env.GROQ_API_KEY.includes("your_groq_api_key") && 
+      !process.env.GROQ_API_KEY.includes("placeholder");
 
     // 🔹 Add user message to session memory
     if (userMessage) {
@@ -526,15 +525,21 @@ app.post("/chat", async (req, res) => {
 
     const clinicalSystem = currentPatient?.system === 'ayush' ? 'AYUSH (Ayurveda)' : 'Allopathic';
 
-    // 🔥 AI CALL
-    const completion = await groq.chat.completions.create({
-      model: GROQ_MODEL,
-      temperature: 0.35,
-      max_tokens: 600,
-      messages: [
-        {
-          role: "system",
-          content: `You are Sanjeevni AI, a friendly, compassionate, and experienced virtual Primary Health Centre (PHC) doctor for Indian patients.
+    let messages = null;
+    let parsed = null;
+
+    if (hasValidGroqKey) {
+      try {
+        let completion = null;
+        try {
+          completion = await groq.chat.completions.create({
+            model: GROQ_MODEL,
+            temperature: 0.35,
+            max_tokens: 600,
+            messages: [
+              {
+                role: "system",
+                content: `You are Sanjeevni AI, a friendly, compassionate, and experienced virtual Primary Health Centre (PHC) doctor for Indian patients.
 
 Your job is to conduct a safe, natural, human-like medical intake conversation. You are NOT a replacement for an in-person doctor and must never claim to provide a definitive diagnosis or prescription.
 
@@ -561,7 +566,7 @@ PREVIOUS MEDICAL HISTORY & PAST VISITS (${currentPatient.pastVisits.length} past
 ${currentPatient.pastVisits.map(v => `- [${v.date}] Pain Area: ${v.selectedBodyPart || 'General'} (Severity ${v.painSeverity || 5}/10): ${v.summary || 'Consultation completed.'}`).join("\n")}
 
 CLINICAL INSTRUCTION FOR RETURNING PATIENTS:
-Warmly acknowledge that you have access to their past medical records (e.g. "I see you visited before for ${currentPatient.pastVisits[0]?.selectedBodyPart || 'health checkup'}"). Ask if current symptoms are related to past issues or if a new problem has arisen.
+Warmly acknowledge that you have access to their past medical records. Ask if current symptoms are related to past issues or if a new problem has arisen.
 ` : ""}
 ${currentPatient.selectedBodyPart ? `
 SELECTED BODY REGION: ${currentPatient.selectedBodyPart}
@@ -613,30 +618,69 @@ EMOTION & ANIMATION GUIDE:
 - Reassurance / encouragement → smile + Talking_2
 - Concern about symptoms → concerned + Talking_1
 - Urgent / serious symptom → sad + Talking_1`,
-        },
-        ...session.chatHistory,
-      ],
-    });
+              },
+              ...session.chatHistory,
+            ],
+          });
+        } catch (modelErr) {
+          console.warn(`Groq primary model ${GROQ_MODEL} error: ${modelErr.message}. Trying fallback model...`);
+          completion = await groq.chat.completions.create({
+            model: "llama-3.1-8b-instant",
+            temperature: 0.35,
+            max_tokens: 600,
+            messages: [
+              { role: "system", content: "You are Dr. Sanjeevni, a virtual PHC doctor. Conduct safe medical intake. Return JSON: { urgent: false, messages: [{ text: string, facialExpression: string, animation: string }] }" },
+              ...session.chatHistory,
+            ],
+          });
+        }
 
-    const raw = completion.choices[0]?.message?.content || "";
-    console.log("🧠 Groq raw:", raw);
+        const raw = completion.choices[0]?.message?.content || "";
+        console.log("🧠 Groq raw:", raw);
 
-    let messages;
-    let parsed = null;
+        const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+        parsed = JSON.parse(cleaned);
+        messages = parsed.messages || parsed;
+      } catch (aiErr) {
+        console.error("Groq completions failed, falling back to clinical rules:", aiErr.message);
+      }
+    }
 
-    // 🔹 Safe JSON parsing
-    try {
-      const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-      parsed = JSON.parse(cleaned);
-      messages = parsed.messages || parsed;
-    } catch (err) {
-      console.error("❌ JSON parse error:", err);
+    // 🔹 Fallback Rule-Based Intake when Groq is unavailable or key not configured
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      const pName = currentPatient?.name && currentPatient.name !== "Unknown" ? currentPatient.name : "";
+      const bodyPart = currentPatient?.selectedBodyPart;
+      const severity = currentPatient?.painSeverity;
+      const uMsgLower = (userMessage || "").toLowerCase();
+
+      let replyText = "";
+      let emotion = "smile";
+      let anim = "Talking_1";
+
+      if (!userMessage && req.body.patientData) {
+        replyText = pName 
+          ? `Namaste ${pName}! I am Dr. Sanjeevni. What symptoms or medical problems are bothering you today?`
+          : `Namaste! I am Dr. Sanjeevni, your virtual doctor. How can I assist you with your health today?`;
+      } else if (bodyPart || uMsgLower.includes("pain") || uMsgLower.includes("arm") || uMsgLower.includes("chest") || uMsgLower.includes("head") || uMsgLower.includes("stomach")) {
+        const area = bodyPart || "that region";
+        replyText = `I see you have discomfort in your ${area}${severity ? ` with an intensity rating of ${severity}/10` : ""}. Could you tell me how long you have experienced this, and if the pain is continuous or sharp?`;
+        emotion = "concerned";
+        anim = "Talking_2";
+      } else if (uMsgLower.includes("fever") || uMsgLower.includes("cough")) {
+        replyText = `I have noted your fever and cough. Have you checked your temperature, and are you having any chills, body aches, or breathing difficulty?`;
+        emotion = "concerned";
+        anim = "Talking_1";
+      } else {
+        replyText = `Thank you for explaining that. To understand your condition better, could you tell me when these symptoms first began?`;
+        emotion = "thinking";
+        anim = "Talking_0";
+      }
 
       messages = [
         {
-          text: raw || "Sorry, I didn't understand that properly.",
-          facialExpression: "default",
-          animation: "Talking_1",
+          text: replyText,
+          facialExpression: emotion,
+          animation: anim,
         },
       ];
     }
@@ -674,21 +718,30 @@ EMOTION & ANIMATION GUIDE:
         locale = "en-US";
       }
 
-      try {
-        await generateMurfAudio(textInput, fileName, voiceId, locale);
-        await lipSyncMessage(filePrefix);
+      const hasValidMurfKey = murfApiKey && 
+        !murfApiKey.includes("your_murf_api_key") && 
+        !murfApiKey.includes("placeholder");
 
-        message.audio = await audioFileToBase64(fileName);
-        message.lipsync = await readJsonTranscript(jsonName);
+      if (hasValidMurfKey) {
+        try {
+          await generateMurfAudio(textInput, fileName, voiceId, locale);
+          await lipSyncMessage(filePrefix);
 
-        // Clean up temporary audio files asynchronously to prevent disk bloat
-        Promise.all([
-          fs.unlink(fileName).catch(() => {}),
-          fs.unlink(wavName).catch(() => {}),
-          fs.unlink(jsonName).catch(() => {})
-        ]);
-      } catch (ttsError) {
-        console.error("⚠️ TTS/Lipsync failed:", ttsError.message);
+          message.audio = await audioFileToBase64(fileName);
+          message.lipsync = await readJsonTranscript(jsonName);
+
+          // Clean up temporary audio files asynchronously to prevent disk bloat
+          Promise.all([
+            fs.unlink(fileName).catch(() => {}),
+            fs.unlink(wavName).catch(() => {}),
+            fs.unlink(jsonName).catch(() => {})
+          ]);
+        } catch (ttsError) {
+          console.error("⚠️ TTS/Lipsync failed:", ttsError.message);
+          message.audio = null;
+          message.lipsync = { mouthCues: [] };
+        }
+      } else {
         message.audio = null;
         message.lipsync = { mouthCues: [] };
       }
@@ -708,7 +761,17 @@ EMOTION & ANIMATION GUIDE:
 
   } catch (error) {
     console.error("🔥 Chat route error:", error);
-    return res.status(500).send({ error: "Something went wrong in /chat", details: error.message });
+    return res.status(200).send({
+      messages: [
+        {
+          text: "Namaste! I am Dr. Sanjeevni, your virtual doctor. How can I assist you with your health today?",
+          facialExpression: "smile",
+          animation: "Talking_1",
+          audio: null,
+          lipsync: { mouthCues: [] },
+        }
+      ]
+    });
   }
 });
 
