@@ -598,7 +598,7 @@ export const UI = ({ hidden }) => {
       return;
     }
     const text = input.current?.value?.trim();
-    if (!loading && !message && text) {
+    if (!loading && text) {
       chat(text);
       if (input.current) input.current.value = "";
     }
@@ -989,6 +989,32 @@ export const UI = ({ hidden }) => {
                 )}
                 {recordingStatus || (isRecording ? "🎙 Listening..." : "")}
               </span>
+            </div>
+          )}
+
+          {/* 🩺 Dr. Sanjeevni Live Consultation Response & Subtitles */}
+          {message?.text && (
+            <div className="mb-4 flex justify-center transition-all duration-300">
+              <div className="bg-slate-900/95 backdrop-blur-2xl border border-sky-400/40 shadow-[0_20px_60px_rgba(14,165,233,0.3)] rounded-3xl p-5 max-w-xl w-full text-left">
+                <div className="flex items-center justify-between gap-3 mb-2.5 pb-2.5 border-b border-slate-700/60">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white text-sm shadow-md">
+                      🩺
+                    </div>
+                    <div>
+                      <h4 className="text-xs uppercase tracking-wider font-extrabold text-sky-400">Dr. Sanjeevni</h4>
+                      <span className="text-[10px] text-slate-400 font-medium">Virtual Healthcare Practitioner</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/10 border border-sky-400/20 text-sky-300 text-xs font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    Speaking
+                  </div>
+                </div>
+                <p className="text-sm md:text-base font-semibold text-slate-100 leading-relaxed">
+                  {message.text}
+                </p>
+              </div>
             </div>
           )}
 

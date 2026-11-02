@@ -134,24 +134,26 @@ export function Avatar(props) {
 
   const animationGltf = useGLTF("/models/animations.glb");
 
+  const avatarNodeSet = useMemo(() => {
+    return new Set(Object.keys(nodes || {}));
+  }, [nodes]);
+
   // ── Animations ─────────────────────────────────────────────────────────────
   const cleanedAnimations = useMemo(() => {
     return animationGltf.animations
       .map((clip) => {
         const validTracks = clip.tracks.filter((track) => {
-          if (
-            track.name === "Armature.position" ||
-            track.name === "Armature.quaternion" ||
-            track.name === "Armature.scale"
-          ) return false;
+          const trackTarget = track.name.split(".")[0];
+          if (trackTarget === "Armature") return false;
           // Filter out Mixamo leaf/dummy end-bone tracks not present on ReadyPlayerMe skeleton
-          if (track.name.includes("_end.") || track.name.includes("_End_end.")) return false;
+          if (trackTarget.toLowerCase().endsWith("_end")) return false;
+          if (avatarNodeSet.size > 0 && !avatarNodeSet.has(trackTarget)) return false;
           return true;
         });
         return new THREE.AnimationClip(clip.name, clip.duration, validTracks);
       })
       .filter((clip) => clip.tracks.length > 0);
-  }, [animationGltf.animations]);
+  }, [animationGltf.animations, avatarNodeSet]);
 
   const { actions } = useAnimations(cleanedAnimations, group);
 
@@ -294,28 +296,30 @@ export function Avatar(props) {
 
     if (message.audio) {
       try {
-        const audio = new Audio("data:audio/mp3;base64," + message.audio);
+        const audioSrc = message.audio.startsWith("data:") || message.audio.startsWith("/") || message.audio.startsWith("http")
+          ? message.audio
+          : "data:audio/mp3;base64," + message.audio;
+        const audio = new Audio(audioSrc);
         audioRef.current = audio;
         pendingAudioRef.current = audio;
 
-        if (message.lipsync) {
+        if (message.lipsync && message.lipsync.mouthCues?.length > 0) {
           setLipsync(message.lipsync);
         }
 
         audio.onended = onPlaybackComplete;
         audio.onerror = () => {
-          // If base64 audio decoding fails, fallback to Web Speech
           fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
         };
 
         audio.play().catch(() => {
           pendingAudioRef.current = audio;
+          fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
         });
       } catch (err) {
         fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
       }
     } else {
-      // No audio payload returned: use Web Speech API fallback
       fallbackToSpeechSynthesis(message.text, onPlaybackComplete);
     }
   }, [message, initTPose]);
@@ -331,12 +335,20 @@ export function Avatar(props) {
     speechStartTimeRef.current = Date.now();
 
     const wordCount = text.trim().split(/\s+/).length;
-    // Doctor cadence: ~140 words per minute
-    const estimatedDurationMs = Math.max(2200, (wordCount / 2.3) * 1000);
+    // Doctor cadence: ~140 words per minute -> ~2.3 words/sec. Minimum 3.5 seconds
+    const targetDurationMs = Math.max(3500, Math.round((wordCount / 2.3) * 1000));
 
     let completed = false;
     const safeComplete = () => {
       if (completed) return;
+      const elapsed = Date.now() - speechStartTimeRef.current;
+      // Guarantee the response remains visible and doctor animates for at least targetDurationMs
+      if (elapsed < targetDurationMs) {
+        if (!speechTimerRef.current) {
+          speechTimerRef.current = setTimeout(safeComplete, targetDurationMs - elapsed);
+        }
+        return;
+      }
       completed = true;
       if (speechTimerRef.current) {
         clearTimeout(speechTimerRef.current);
@@ -363,13 +375,25 @@ export function Avatar(props) {
         utterance.rate = 0.95;
         utterance.pitch = 1.05;
 
-        utterance.onend = safeComplete;
-        utterance.onerror = safeComplete;
+        utterance.onend = () => {
+          const elapsed = Date.now() - speechStartTimeRef.current;
+          if (elapsed >= 1500) {
+            safeComplete();
+          } else {
+            speechTimerRef.current = setTimeout(safeComplete, targetDurationMs - elapsed);
+          }
+        };
+        utterance.onerror = () => {
+          // Instant error on browsers without local TTS voices: maintain visual speech animation for target duration
+          const elapsed = Date.now() - speechStartTimeRef.current;
+          const remaining = Math.max(0, targetDurationMs - elapsed);
+          speechTimerRef.current = setTimeout(safeComplete, remaining);
+        };
 
         window.speechSynthesis.speak(utterance);
 
         // Safety fallback timer in case speech synthesis stalls
-        speechTimerRef.current = setTimeout(safeComplete, estimatedDurationMs + 1500);
+        speechTimerRef.current = setTimeout(safeComplete, targetDurationMs + 1500);
         return;
       } catch (e) {
         console.warn("SpeechSynthesis error, falling back to timed animation:", e);
@@ -377,7 +401,7 @@ export function Avatar(props) {
     }
 
     // Default timed animation if SpeechSynthesis is unavailable
-    speechTimerRef.current = setTimeout(safeComplete, estimatedDurationMs);
+    speechTimerRef.current = setTimeout(safeComplete, targetDurationMs);
   };
 
   // ── Unblock browser autoplay on first user interaction ─────────────────────
@@ -396,24 +420,34 @@ export function Avatar(props) {
     };
   }, []);
 
-  // ── Animation action transitions ───────────────────────────────────────────
+  const activeActionRef = useRef(null);
+
+  // ── Animation action transitions (guarantees weight is maintained) ─────────
   useEffect(() => {
     if (animation === "TPose") {
       if (actions) {
         Object.values(actions).forEach((a) => a?.stop());
       }
+      activeActionRef.current = null;
       return;
     }
-    if (!actions || !animation) return;
-    const currentAction = actions[animation];
-    if (currentAction) {
-      currentAction.reset().fadeIn(0.3).play();
+    if (!actions) return;
+    const nextAction = actions[animation] || actions["Idle"];
+    if (!nextAction) return;
+
+    const prevAction = activeActionRef.current;
+    if (prevAction && prevAction !== nextAction) {
+      prevAction.fadeOut(0.25);
     }
-    return () => {
-      if (currentAction) {
-        currentAction.fadeOut(0.3);
-      }
-    };
+
+    nextAction
+      .reset()
+      .setEffectiveTimeScale(1)
+      .setEffectiveWeight(1)
+      .fadeIn(0.25)
+      .play();
+
+    activeActionRef.current = nextAction;
   }, [animation, actions]);
 
   // ── Helper: Lerp morph targets ─────────────────────────────────────────────
