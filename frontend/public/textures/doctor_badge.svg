@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="700" viewBox="0 0 512 700">
+  <rect width="512" height="700" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="8"/>
+  <rect width="512" height="150" rx="20" fill="#0D5C63"/>
+  <rect x="206" y="25" width="100" height="20" rx="10" fill="#64748B"/>
+  <text x="256" y="110" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#FFFFFF" text-anchor="middle" letter-spacing="3">SANJEEVNI AI</text>
+  <rect x="56" y="170" width="400" height="34" rx="17" fill="#E0F2FE"/>
+  <text x="256" y="194" font-family="Arial, sans-serif" font-weight="bold" font-size="18" fill="#0369A1" text-anchor="middle" letter-spacing="1">HOSPITAL MEDICAL STAFF</text>
+  
+  <rect x="156" y="230" width="200" height="200" rx="16" fill="#F1F5F9" stroke="#0D5C63" stroke-width="4"/>
+  <circle cx="256" cy="310" r="50" fill="#CBD5E1"/>
+  <path d="M 216 380 Q 256 340 296 380" fill="#94A3B8"/>
+  <rect x="310" y="240" width="36" height="36" rx="6" fill="#0D5C63"/>
+  <path d="M 324 246 L 332 246 L 332 270 L 324 270 Z" fill="#FFFFFF"/>
+  <path d="M 316 254 L 340 254 L 340 262 L 316 262 Z" fill="#FFFFFF"/>
+
+  <text x="256" y="475" font-family="Arial, sans-serif" font-weight="bold" font-size="28" fill="#0F172A" text-anchor="middle">DR. SANJEEVNI</text>
+  <text x="256" y="515" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#0D5C63" text-anchor="middle">AI HEALTHCARE ASSISTANT</text>
+  <text x="256" y="545" font-family="Arial, sans-serif" font-size="16" fill="#64748B" text-anchor="middle">ID: SNJ-2026-MED</text>
+
+  <line x1="100" y1="590" x2="100" y2="640" stroke="#0F172A" stroke-width="6"/>
+  <line x1="115" y1="590" x2="115" y2="640" stroke="#0F172A" stroke-width="3"/>
+  <line x1="128" y1="590" x2="128" y2="640" stroke="#0F172A" stroke-width="8"/>
+  <line x1="148" y1="590" x2="148" y2="640" stroke="#0F172A" stroke-width="4"/>
+  <line x1="162" y1="590" x2="162" y2="640" stroke="#0F172A" stroke-width="10"/>
+  <line x1="184" y1="590" x2="184" y2="640" stroke="#0F172A" stroke-width="4"/>
+  <line x1="200" y1="590" x2="200" y2="640" stroke="#0F172A" stroke-width="7"/>
+  <line x1="220" y1="590" x2="220" y2="640" stroke="#0F172A" stroke-width="3"/>
+  <line x1="235" y1="590" x2="235" y2="640" stroke="#0F172A" stroke-width="12"/>
+  <line x1="260" y1="590" x2="260" y2="640" stroke="#0F172A" stroke-width="5"/>
+  <line x1="278" y1="590" x2="278" y2="640" stroke="#0F172A" stroke-width="8"/>
+  <line x1="298" y1="590" x2="298" y2="640" stroke="#0F172A" stroke-width="4"/>
+  <line x1="315" y1="590" x2="315" y2="640" stroke="#0F172A" stroke-width="11"/>
+  <line x1="338" y1="590" x2="338" y2="640" stroke="#0F172A" stroke-width="4"/>
+  <line x1="355" y1="590" x2="355" y2="640" stroke="#0F172A" stroke-width="9"/>
+  <line x1="375" y1="590" x2="375" y2="640" stroke="#0F172A" stroke-width="6"/>
+  <line x1="395" y1="590" x2="395" y2="640" stroke="#0F172A" stroke-width="10"/>
+  <line x1="412" y1="590" x2="412" y2="640" stroke="#0F172A" stroke-width="4"/>
+</svg>

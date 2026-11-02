@@ -135,6 +135,17 @@ export const UI = ({ hidden }) => {
     }
   }, [message, showModal, messages]);
 
+  // ── 3D Avatar Anatomical Click Listener (Direct 3D Body Raycast) ─────────────
+  useEffect(() => {
+    const handle3DBodyPart = (e) => {
+      const { id, label, symptoms } = e.detail || {};
+      console.log("📍 3D Avatar Anatomical Target Clicked:", label);
+      setShowBodyMap(true);
+    };
+    window.addEventListener("sanjeevni:bodypart", handle3DBodyPart);
+    return () => window.removeEventListener("sanjeevni:bodypart", handle3DBodyPart);
+  }, []);
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;

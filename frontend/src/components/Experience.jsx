@@ -42,11 +42,20 @@ export const Experience = () => {
   const { cameraZoomed } = useChat();
 
   useEffect(() => {
-    // Complete head-to-toe clinical view: head, coat, stethoscope, scrubs, hands, and white medical shoes visible
-    cameraControls.current?.setLookAt(0, 0.88, 3.45, 0, 0.84, 0);
-  }, []);
-
-  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get("view");
+      if (view === "face") {
+        cameraControls.current?.setLookAt(0, 1.58, 0.65, 0, 1.57, 0);
+        return;
+      } else if (view === "uniform") {
+        cameraControls.current?.setLookAt(0, 1.15, 1.40, 0, 1.12, 0);
+        return;
+      } else if (view === "side") {
+        cameraControls.current?.setLookAt(1.9, 0.95, 1.9, 0, 0.90, 0);
+        return;
+      }
+    }
     if (cameraZoomed) {
       // Attentive close-up for conversational consultation
       cameraControls.current?.setLookAt(0, 1.34, 1.65, 0, 1.30, 0, true);
