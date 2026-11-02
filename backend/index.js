@@ -483,6 +483,7 @@ app.post("/chat", async (req, res) => {
       return res.send({
         messages: [
           {
+            id: `intro_0_${Date.now()}`,
             text: "Namaste! I am Dr. Sanjeevni, your virtual healthcare assistant. How are you feeling today?",
             audio: await audioFileToBase64("audios/api_lipsync.mp3"),
             lipsync: await readJsonTranscript("audios/api_lipsync.json"),
@@ -490,6 +491,7 @@ app.post("/chat", async (req, res) => {
             animation: "Talking_1",
           },
           {
+            id: `intro_1_${Date.now() + 1}`,
             text: "You can describe your symptoms or tap any area on the 3D body map. I am here to help you.",
             audio: null,
             lipsync: { mouthCues: [] },
@@ -757,6 +759,10 @@ EMOTION & ANIMATION GUIDE:
       });
     }
 
+    messages.forEach((m, idx) => {
+      m.id = m.id || `msg_${session.id}_${Date.now()}_${idx}`;
+    });
+
     return res.send({ messages });
 
   } catch (error) {
@@ -764,6 +770,7 @@ EMOTION & ANIMATION GUIDE:
     return res.status(200).send({
       messages: [
         {
+          id: `fallback_${Date.now()}`,
           text: "Namaste! I am Dr. Sanjeevni, your virtual doctor. How can I assist you with your health today?",
           facialExpression: "smile",
           animation: "Talking_1",
@@ -1107,6 +1114,14 @@ app.get("/get-avatar-payload", (req, res) => {
 
 // ── Start server (always last, after all routes are registered) ─────────────
 const startServer = async () => {
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Sanjeevni AI listening on port ${port}`);
+    console.log(`Rhubarb path: ${RHUBARB_PATH}`);
+    console.log(`FFmpeg path: ${FFMPEG_PATH}`);
+    console.log(`Murf voice: ${MURF_VOICE_ID}`);
+    console.log(`Murf locale: ${MURF_LOCALE}`);
+  });
+
   if (process.platform === "linux") {
     try {
       await execCommand(`"${RHUBARB_PATH}" --version`);
@@ -1123,14 +1138,6 @@ const startServer = async () => {
       }
     }
   }
-
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Sanjeevni AI listening on port ${port}`);
-    console.log(`Rhubarb path: ${RHUBARB_PATH}`);
-    console.log(`FFmpeg path: ${FFMPEG_PATH}`);
-    console.log(`Murf voice: ${MURF_VOICE_ID}`);
-    console.log(`Murf locale: ${MURF_LOCALE}`);
-  });
 };
 
 startServer();

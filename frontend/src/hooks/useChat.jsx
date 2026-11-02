@@ -145,8 +145,12 @@ export const ChatProvider = ({ children }) => {
       if (data) {
         const resp = Array.isArray(data?.messages) ? data.messages : [];
         if (resp.length > 0) {
-          setMessages((prev) => [...prev, ...resp]);
-          return resp;
+          const formatted = resp.map((m, idx) => ({
+            ...m,
+            id: m.id || `msg_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+          }));
+          setMessages((prev) => [...prev, ...formatted]);
+          return formatted;
         }
       }
 
@@ -173,10 +177,15 @@ export const ChatProvider = ({ children }) => {
   };
 
   const playCustomMessage = (text, audioBase64, lipsync) => {
-    setMessages((prev) => [
-      ...prev,
-      { text, audio: audioBase64, lipsync, facialExpression: "smile", animation: "Talking_1" },
-    ]);
+    const customMsg = {
+      id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text,
+      audio: audioBase64,
+      lipsync,
+      facialExpression: "smile",
+      animation: "Talking_1",
+    };
+    setMessages((prev) => [...prev, customMsg]);
   };
 
   // ── Python avatar: set message directly, bypass queue ────────────────────

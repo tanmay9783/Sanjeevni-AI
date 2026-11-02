@@ -115,6 +115,7 @@ export function Avatar(props) {
   const isSpeakingRef = useRef(false);
   const speechStartTimeRef = useRef(0);
   const speechTimerRef = useRef(null);
+  const currentUtteranceRef = useRef(null);
 
   const [lipsync, setLipsyncState] = useState(null);
   const [facialExpression, setFacialExpressionState] = useState("default");
@@ -145,15 +146,12 @@ export function Avatar(props) {
           ) return false;
           // Filter out Mixamo leaf/dummy end-bone tracks not present on ReadyPlayerMe skeleton
           if (track.name.includes("_end.") || track.name.includes("_End_end.")) return false;
-          // Verify bone exists in loaded rig nodes
-          const nodeName = track.name.split(".")[0];
-          if (nodes && !nodes[nodeName]) return false;
           return true;
         });
         return new THREE.AnimationClip(clip.name, clip.duration, validTracks);
       })
       .filter((clip) => clip.tracks.length > 0);
-  }, [animationGltf.animations, nodes]);
+  }, [animationGltf.animations]);
 
   const { actions } = useAnimations(cleanedAnimations, group);
 
@@ -244,17 +242,23 @@ export function Avatar(props) {
     if (!message) {
       hasMessageRef.current = false;
       isSpeakingRef.current = false;
-      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+      lastPlayedMessageRef.current = null;
+      if (speechTimerRef.current) {
+        clearTimeout(speechTimerRef.current);
+        speechTimerRef.current = null;
+      }
       if (!initTPose) setAnimation("Idle");
       setLipsync(null);
       setFacialExpression("default");
       return;
     }
 
-    if (lastPlayedMessageRef.current === message.id) {
+    // Identify message uniquely by id, text, or object reference
+    const msgIdentifier = message.id || message.text || message;
+    if (lastPlayedMessageRef.current === msgIdentifier) {
       return;
     }
-    lastPlayedMessageRef.current = message.id;
+    lastPlayedMessageRef.current = msgIdentifier;
     hasMessageRef.current = true;
 
     if (audioRef.current) {
@@ -274,6 +278,7 @@ export function Avatar(props) {
     const onPlaybackComplete = () => {
       hasMessageRef.current = false;
       isSpeakingRef.current = false;
+      lastPlayedMessageRef.current = null; // Reset so queue advances smoothly
       setLipsync(null);
       setFacialExpression("default");
       setAnimation("Idle");
@@ -283,6 +288,7 @@ export function Avatar(props) {
         clearTimeout(speechTimerRef.current);
         speechTimerRef.current = null;
       }
+      currentUtteranceRef.current = null;
       onMessagePlayed();
     };
 
@@ -326,12 +332,25 @@ export function Avatar(props) {
 
     const wordCount = text.trim().split(/\s+/).length;
     // Doctor cadence: ~140 words per minute
-    const estimatedDurationMs = Math.max(2500, (wordCount / 2.3) * 1000);
+    const estimatedDurationMs = Math.max(2200, (wordCount / 2.3) * 1000);
+
+    let completed = false;
+    const safeComplete = () => {
+      if (completed) return;
+      completed = true;
+      if (speechTimerRef.current) {
+        clearTimeout(speechTimerRef.current);
+        speechTimerRef.current = null;
+      }
+      currentUtteranceRef.current = null;
+      onComplete();
+    };
 
     if ("speechSynthesis" in window) {
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
+        currentUtteranceRef.current = utterance; // Keep reference to prevent GC during playback
         
         // Find suitable voice (prefer Indian English or natural female voice)
         const voices = window.speechSynthesis.getVoices();
@@ -344,22 +363,13 @@ export function Avatar(props) {
         utterance.rate = 0.95;
         utterance.pitch = 1.05;
 
-        utterance.onend = () => {
-          onComplete();
-        };
-        utterance.onerror = () => {
-          onComplete();
-        };
+        utterance.onend = safeComplete;
+        utterance.onerror = safeComplete;
 
         window.speechSynthesis.speak(utterance);
 
         // Safety fallback timer in case speech synthesis stalls
-        speechTimerRef.current = setTimeout(() => {
-          if (isSpeakingRef.current) {
-            onComplete();
-          }
-        }, estimatedDurationMs + 1500);
-
+        speechTimerRef.current = setTimeout(safeComplete, estimatedDurationMs + 1500);
         return;
       } catch (e) {
         console.warn("SpeechSynthesis error, falling back to timed animation:", e);
@@ -367,7 +377,7 @@ export function Avatar(props) {
     }
 
     // Default timed animation if SpeechSynthesis is unavailable
-    speechTimerRef.current = setTimeout(onComplete, estimatedDurationMs);
+    speechTimerRef.current = setTimeout(safeComplete, estimatedDurationMs);
   };
 
   // ── Unblock browser autoplay on first user interaction ─────────────────────
